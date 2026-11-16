@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LDM Project Portal</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Rubik:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="auth" id="auth" hidden>
+  <div class="acard">
+    <img src="logo.png" alt="LDM Construction, Engineers, Architects, Builders">
+    <div class="acard-body"><p class="muted">Loading…</p></div>
+  </div>
+</div>
+<div class="app" hidden>
+  <aside>
+    <div class="brand"><img src="logo.png" alt="LDM Construction"><b>Project Portal<span>.</span></b></div>
+    <nav id="nav"></nav>
+    <div class="side-foot" id="sync"></div>
+  </aside>
+  <main>
+    <div class="banner" id="banner"></div>
+    <div id="view"></div>
+  </main>
+</div>
+<div class="overlay" id="overlay"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" role="status"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="ph-map.js"></script>
+<script src="src/views.js"></script>
+<script src="src/portal.js"></script>
+</body>
+</html>
