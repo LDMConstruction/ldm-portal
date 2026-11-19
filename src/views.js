@@ -2,10 +2,10 @@
 
 const PHASES = ["Design","Permitting","Mobilization","Demolition","Structural","Roofing & Masonry","MEPF Roughing","Finishing","Punchlist","Turnover"];
 const PHASE_COLORS = ["#a7e6e3","#74d7d3","#3fc9c4","#0ebcb6","#0b9a95","#087f7b","#06625f","#575757","#2b2b2b","#000000"];
-const STATUSES = ["Proposal","Onboarded","Ongoing","On Hold","Completed","Unconfirmed"];
+const STATUSES = ["Proposal","Onboarded","Ongoing","On Hold","Completed","Terminated","Unconfirmed"];
 const ACTIVE = new Set(["Onboarded","Ongoing"]);
 const RELEASE_PHASES = new Set(["Finishing","Punchlist","Turnover"]);
-const CATS = ["Materials","Labor","Subcontract","Equipment","Permits & Fees","Overhead","Misc"];
+const CATS = ["Mobilization","Temporary Facilities","Materials","Labor","Subcontract","Equipment","Permits & Fees","Overhead","Misc"];
 const DESIGN_CATS = ["Design Manpower","Consultants","Survey & Soil Test","Plans & Printing","Permits & Fees","Transportation","Misc"];
 const STAGES = ["Design","Construction"];
 const PAY_TYPES = ["Downpayment","Progress billing","Retention release","Final payment","Change order","Other"];
@@ -283,7 +283,7 @@ function vClients() {
 function vPhases() {
   const live = S.projects.filter(p => ["Onboarded", "Ongoing", "On Hold", "Unconfirmed"].includes(p.status));
   const props = S.projects.filter(p => p.status === "Proposal");
-  const done = S.projects.filter(p => p.status === "Completed");
+  const done = S.projects.filter(p => p.status === "Completed" || p.status === "Terminated");
   const card = p => { const sp = span(p); return `<button class="pc ${isLate(p) ? "late" : ""} ${esc(p.status)}" data-a="edit" data-id="${p.id}"><b>${esc(p.name)}</b><span class="small muted">${esc(p.client || "")}</span>
     <div class="row" style="justify-content:space-between">${chip(p.status)}<span class="small" style="font-family:var(--mono)">${+p.progress || 0}%</span></div><div class="bar"><i style="width:${Math.min(100, +p.progress || 0)}%"></i></div>
     ${p.mobilizationDate && parseD(p.mobilizationDate) >= today() ? `<span class="small"><b>Mobilizes ${fmtD(p.mobilizationDate)}</b></span>` : ""}<span class="small ${isLate(p) ? "neg" : "muted"}">Target ${p.endDate ? fmtD(p.endDate) : "not set"}</span></button>`; };
@@ -296,7 +296,7 @@ function vPhases() {
   <div class="board">${cols.map(c => `<div class="col"><h3>${esc(c.ph)} <span class="n">${c.items.length}</span></h3>${c.items.map(card).join("")}</div>`).join("")}</div>
   <div class="two">
     <div class="card"><h2>Proposals in the pipeline (${props.length})</h2>${props.length ? `<table><tbody>${props.map(p => `<tr class="click" data-a="edit" data-id="${p.id}"><td><b>${esc(p.name)}</b><div class="small muted">${esc(p.client || "")} · ${esc(p.location || "")}</div></td><td class="num">${p.contract ? peso(p.contract) : "—"}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No open proposals.</div>`}</div>
-    <div class="card"><h2>Completed (${done.length})</h2>${done.length ? `<table><tbody>${done.map(p => `<tr class="click" data-a="edit" data-id="${p.id}"><td><b>${esc(p.name)}</b><div class="small muted">${esc(p.client || "")}</div></td><td class="small muted">${fmtD(p.endDate)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">Nothing completed yet.</div>`}</div>
+    <div class="card"><h2>Completed and terminated (${done.length})</h2>${done.length ? `<table><tbody>${done.map(p => `<tr class="click" data-a="edit" data-id="${p.id}"><td><b>${esc(p.name)}</b><div class="small muted">${esc(p.client || "")}</div></td><td class="small muted">${p.status === "Terminated" ? chip("Terminated") : fmtD(p.endDate)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">Nothing completed yet.</div>`}</div>
   </div>`;
 }
 
@@ -411,6 +411,7 @@ function vCollections() {
     <div class="card scroll"><h2>Payments received in ${y}</h2>${list.length ? `<table><thead><tr><th>Date</th><th>Project</th><th>For</th><th>Type</th><th>Reference</th><th class="num">Amount</th></tr></thead><tbody>
     ${list.map(c => `<tr class="click" data-a="edit-col" data-id="${c.id}"><td class="small">${fmtD(c.date)}</td><td>${esc(projName(c.projectId))}</td><td>${c.stage === "Design" ? `<span class="chip">Design</span>` : `<span class="small muted">Construction</span>`}</td><td class="small">${esc(c.type || "")}</td><td class="small">${esc(c.reference || "")}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}
     </tbody></table>` : `<div class="empty">No payments recorded for ${y}. Click Record a collection when a client pays.</div>`}</div>
+    ${clientOwedCard()}
     <div class="card scroll"><h2>Cash in vs cash out, ${y}</h2><table><thead><tr><th>Month</th><th class="num">Collected</th><th class="num">Costs</th><th class="num">Net</th></tr></thead><tbody>
     ${months.map(r => `<tr><td>${r.m}</td><td class="num ${r.inn ? "" : "muted"}">${r.inn ? peso(r.inn) : "–"}</td><td class="num ${r.out ? "" : "muted"}">${r.out ? peso(r.out) : "–"}</td><td class="num ${r.net < 0 ? "neg" : r.net > 0 ? "pos" : "muted"}">${r.inn || r.out ? peso(r.net) : "–"}</td></tr>`).join("")}
     </tbody><tfoot><tr><td>${y}</td><td class="num">${peso(yi)}</td><td class="num">${peso(yo)}</td><td class="num ${yi - yo < 0 ? "neg" : ""}">${peso(yi - yo)}</td></tr></tfoot></table></div>
@@ -437,12 +438,12 @@ function collectionForm(c) {
 }
 
 function vProfit() {
-  const list = S.projects.filter(p => ["Onboarded", "Ongoing", "On Hold", "Completed", "Proposal"].includes(p.status));
-  const order = { Ongoing: 0, Onboarded: 1, "On Hold": 2, Proposal: 3, Completed: 4 };
+  const list = S.projects.filter(p => ["Onboarded", "Ongoing", "On Hold", "Completed", "Terminated", "Proposal"].includes(p.status));
+  const order = { Ongoing: 0, Onboarded: 1, "On Hold": 2, Proposal: 3, Completed: 4, Terminated: 5 };
   list.sort((a, b) => order[a.status] - order[b.status]);
   const book = list.filter(p => p.status !== "Proposal");
   const z = { dc: 0, cc: 0, db: 0, dp: 0, cp: 0, c: 0, e: 0, a: 0, da: 0, col: 0, p: 0, r: 0, ap: 0 };
-  const T = book.reduce((t, p) => { const f = fin(p); t.dc += f.designC; t.cc += f.constrC; t.db += f.designBasis; t.dp += f.designProfit; t.cp += f.constrProfit; t.c += f.contract; t.e += f.est; t.a += f.actual; t.da += f.designActual; t.col += f.collected; if (f.ok) { t.p += f.profit; t.pc += f.contract; t.pn++; } if (f.est > 0) t.r += f.running; if (p.status === "Completed") { t.ap += f.actualProfit; t.apc += f.contract; t.app += f.profit; t.n++; } return t; }, { ...z, apc: 0, app: 0, n: 0, pc: 0, pn: 0 });
+  const T = book.reduce((t, p) => { const f = fin(p); t.dc += f.designC; t.cc += f.constrC; t.db += f.designBasis; t.dp += f.designProfit; t.cp += f.constrProfit; t.c += f.contract; t.e += f.est; t.a += f.actual; t.da += f.designActual; t.col += f.collected; if (f.ok) { t.p += f.profit; t.pc += f.contract; t.pn++; } if (f.est > 0) t.r += f.running; if (p.status === "Completed" || p.status === "Terminated") { t.ap += f.actualProfit; t.apc += f.contract; t.app += f.profit; t.n++; } return t; }, { ...z, apc: 0, app: 0, n: 0, pc: 0, pn: 0 });
   const pipe = list.filter(p => p.status === "Proposal" && fin(p).ok).reduce((a, p) => a + fin(p).profit, 0);
   const pm = (a, b) => b ? Math.round(a / b * 100) + "%" : "–";
   const used = (p, f) => { if (!f.est) return `<span class="muted small">set direct cost</span>`; const u = f.spent / f.est * 100, pr = derive(p).progress;
@@ -463,7 +464,7 @@ function vProfit() {
     <td class="num ${f.ok ? (f.profit < 0 ? "neg" : "pos") : ""}">${f.ok ? peso(f.profit) : `<span class="small muted">set direct cost</span>`}</td>
     <td class="num">${f.actual ? peso(f.actual) : "–"}${f.designActual ? `<div class="small muted">+ design ${pesoS(f.designActual)}</div>` : ""}</td>
     <td class="num ${f.running < 0 ? "neg" : ""}"><b>${f.est ? peso(f.running) : "–"}</b></td>
-    ${p.status === "Completed" ? `<td class="num ${f.contract ? (f.actualProfit < 0 ? "neg" : "pos") : ""}"><b>${f.contract ? peso(f.actualProfit) : "–"}</b></td>
+    ${p.status === "Completed" || p.status === "Terminated" ? `<td class="num ${f.contract ? (f.actualProfit < 0 ? "neg" : "pos") : ""}"><b>${f.contract ? peso(f.actualProfit) : "–"}</b></td>
     <td class="num small">${f.contract ? `${f.ok ? pm(f.profit, f.contract) + " → " : ""}<b>${pm(f.actualProfit, f.contract)}</b>` : "–"}</td>` : `<td class="num small muted">at completion</td><td class="num small">${f.ok ? pm(f.profit, f.contract) : "–"}</td>`}
     <td style="min-width:170px">${used(p, f)}</td></tr>`; }).join("")}
   </tbody><tfoot><tr><td>Booked total</td><td class="num">${peso(T.c)}</td><td class="num">${peso(T.e)}</td><td class="num">${T.pn ? peso(T.p) : "–"}</td><td class="num">${peso(T.a + T.da)}</td><td class="num">${T.e ? peso(T.r) : "–"}</td><td class="num">${T.n ? peso(T.ap) : "–"}</td><td class="num small">${T.pn ? pm(T.p, T.pc) : "–"}</td><td></td></tr></tfoot></table>
@@ -520,7 +521,7 @@ function costForm(c) {
   <form id="cf" class="fg">
     <label class="f wide" for="c-proj">Project<select id="c-proj" name="projectId" required>${S.projects.filter(p => p.status !== "Proposal").map(p => `<option value="${p.id}" ${p.id === c.projectId ? "selected" : ""}>${esc(p.name)}${p.client ? " · " + esc(p.client) : ""}</option>`).join("")}</select></label>
     <label class="f" for="c-date">Date<input id="c-date" name="date" type="date" required value="${esc(c.date)}"></label>
-    <label class="f" for="c-paid">Paid from<select id="c-paid" name="paidFrom">${[["company", "Company"], ["petty_cash", "Petty cash"], ["out_of_pocket", "Out of pocket"]].map(([v, t]) => `<option value="${v}" ${v === (c.paidFrom || "company") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+    <label class="f" for="c-paid">Paid from<select id="c-paid" name="paidFrom">${[["company", "Company"], ["petty_cash", "Petty cash"], ["out_of_pocket", "Out of pocket"], ["client", "Paid by client (LDM reimburses)"]].map(([v, t]) => `<option value="${v}" ${v === (c.paidFrom || "company") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     <label class="f" for="c-stage">Stage<select id="c-stage" name="stage">${STAGES.map(x => `<option ${x === st0 ? "selected" : ""}>${x}</option>`).join("")}</select></label>
     <label class="f" for="c-cat">Category<select id="c-cat" name="category">${(cats0.includes(c.category) ? cats0 : [c.category, ...cats0]).map(x => `<option ${x === c.category ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
     <label class="f" for="c-amt">Amount (₱)<input id="c-amt" name="amount" type="number" min="0" step="0.01" required value="${c.amount || ""}"></label>

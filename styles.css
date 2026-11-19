@@ -97,6 +97,7 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--ink); border-bottom: no
 .chip.Proposal { background: var(--warn-soft); color: var(--warn); }
 .chip.OnHold { background: var(--line); color: var(--muted); }
 .chip.Completed { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.chip.Terminated { background: var(--ink); color: var(--panel); }
 .chip.Unconfirmed { background: var(--bad-soft); color: var(--bad); }
 .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--brand); }
@@ -297,3 +298,12 @@ input[type=month] { background: var(--panel); border: 1px solid var(--line); bor
   .rd-photos img { aspect-ratio: auto; max-height: 85mm; object-fit: contain; }
 }
 .dbig span b { font: inherit; font-weight: 700; }
+/* ---------- progress billing ---------- */
+.btable td, .btable th { padding: 7px 8px; font-size: 13.5px; color: #000; border-color: #ddd; }
+.btable tfoot td { border-top: 2px solid #000; }
+.bsum { max-width: 460px; margin-left: auto; }
+.bsum td { padding: 6px 8px; color: #000; border-color: #e3e3e3; }
+.bsum tr.due td { font-weight: 800; font-size: 16px; border-top: 2px solid #000; border-bottom: 3px double #000; }
+.bitems input { width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 70px; }
+.bitems td:first-child input { min-width: 180px; }
+.bitems td { padding: 4px 6px; }

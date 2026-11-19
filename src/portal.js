@@ -6,7 +6,7 @@ let sb = null, ME = null, ROLE = null;
 const IS = r => ROLE === r;
 const nz = v => (v === "" || v === undefined ? null : v);
 const num = v => (v === "" || v == null || isNaN(+v) ? 0 : +v);
-Object.assign(S, { petty: [], reports: [], profiles: [], members: [], names: {}, summary: [], photoCache: {}, runMonth: ym(new Date()), viewReport: null, reportFilter: "" });
+Object.assign(S, { billings: [], viewBilling: null, petty: [], reports: [], profiles: [], members: [], names: {}, summary: [], photoCache: {}, runMonth: ym(new Date()), viewReport: null, reportFilter: "" });
 
 /* ---------- mapping between the database and the screens ---------- */
 function fromProject(r, f) {
@@ -43,14 +43,14 @@ async function loadAll() {
   ]);
   if (settings) S.settings = { capacity: settings.capacity, assumedMonths: settings.assumed_months, releaseMonths: settings.release_months };
   let fins = [];
-  S.costs = []; S.collections = []; S.petty = []; S.reports = []; S.summary = [];
+  S.costs = []; S.collections = []; S.petty = []; S.reports = []; S.summary = []; S.billings = [];
   if (IS("owner")) {
-    const [f, c, k, p, r, pr, m] = await Promise.all([
+    const [f, c, k, p, r, pr, m, bl] = await Promise.all([
       q(sb.from("project_finance").select("*")), q(sb.from("costs").select("*").order("date", { ascending: false })),
       q(sb.from("collections").select("*")), q(sb.from("petty_cash").select("*").order("date", { ascending: false })),
       q(sb.from("reports").select("*").order("week_start", { ascending: false })), q(sb.from("profiles").select("*").order("created_at")),
-      q(sb.from("project_members").select("*"))]);
-    fins = f; S.costs = c.map(fromCost); S.collections = k.map(fromCol); S.petty = p.map(fromPetty); S.reports = r; S.profiles = pr; S.members = m;
+      q(sb.from("project_members").select("*")), q(sb.from("progress_billings").select("*").order("billing_no"))]);
+    S.billings = bl; fins = f; S.costs = c.map(fromCost); S.collections = k.map(fromCol); S.petty = p.map(fromPetty); S.reports = r; S.profiles = pr; S.members = m;
     S.names = Object.fromEntries(pr.map(x => [x.id, x.full_name || (x.email || "").split("@")[0]]));
   } else if (IS("employee")) {
     const [c, p, r, m, n] = await Promise.all([
@@ -58,9 +58,10 @@ async function loadAll() {
       q(sb.from("reports").select("*").order("week_start", { ascending: false })), q(sb.from("project_members").select("*")), q(sb.rpc("people_names"))]);
     S.costs = c.map(fromCost); S.petty = p.map(fromPetty); S.reports = r; S.members = m; S.names = Object.fromEntries(n.map(x => [x.id, x.full_name]));
   } else if (IS("client")) {
-    const [sum, k, r, n] = await Promise.all([q(sb.rpc("client_summary")), q(sb.from("collections").select("*").order("date", { ascending: false })),
-      q(sb.from("reports").select("*").order("week_start", { ascending: false })), q(sb.rpc("people_names"))]);
-    S.summary = sum; S.collections = k.map(fromCol); S.reports = r; S.names = Object.fromEntries(n.map(x => [x.id, x.full_name]));
+    const [sum, k, r, n, bl, cc] = await Promise.all([q(sb.rpc("client_summary")), q(sb.from("collections").select("*").order("date", { ascending: false })),
+      q(sb.from("reports").select("*").order("week_start", { ascending: false })), q(sb.rpc("people_names")),
+      q(sb.from("progress_billings").select("*").order("billing_no")), q(sb.from("costs").select("*").order("date", { ascending: false }))]);
+    S.billings = bl; S.costs = cc.map(fromCost); S.summary = sum; S.collections = k.map(fromCol); S.reports = r; S.names = Object.fromEntries(n.map(x => [x.id, x.full_name]));
   }
   S.projects = projects.map(p => fromProject(p, fins.find(f => f.project_id === p.id)));
   S.loaded = true;
@@ -116,7 +117,7 @@ function pettyTotals(empId) {
   const oop = S.costs.filter(c => mine(c) && c.paidFrom === "out_of_pocket" && !c.reimbursed).reduce((a, c) => a + c.amount, 0);
   return { rec, spent, hand: rec - spent, oop };
 }
-const PAID = { petty_cash: "Petty cash", out_of_pocket: "Out of pocket", company: "Company" };
+const PAID = { petty_cash: "Petty cash", out_of_pocket: "Out of pocket", company: "Company", client: "Paid by client" };
 
 function vRunning() {
   const t = pettyTotals(IS("owner") ? ME.id : null);
@@ -138,7 +139,7 @@ function vRunning() {
     <div class="card scroll"><div class="row" style="justify-content:space-between"><h2>Expenses for ${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}</h2><input type="month" id="rm" value="${m}" data-local="runMonth" aria-label="Month"></div>
       ${list.length ? `<table><thead><tr><th>Date</th><th>Project</th><th>Category</th><th>Description</th><th>Paid from</th><th class="num">Amount</th></tr></thead><tbody>
       ${list.map(c => `<tr class="${c.reimbursed ? "" : "click"}" ${c.reimbursed ? "" : `data-a="edit-exp" data-id="${c.id}"`}><td class="small">${fmtD(c.date)}</td><td>${esc(projName(c.projectId))}</td><td class="small">${c.stage === "Design" ? `<span class="chip">Design</span> ` : ""}${esc(c.category)}</td><td class="small">${esc(c.description)}</td>
-        <td class="small">${PAID[c.paidFrom] || ""}${c.paidFrom === "out_of_pocket" ? (c.reimbursed ? ` <span class="chip Ongoing">Reimbursed</span>` : ` <span class="chip Proposal">Pending</span>`) : ""}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}
+        <td class="small">${PAID[c.paidFrom] || ""}${c.paidFrom === "out_of_pocket" || c.paidFrom === "client" ? (c.reimbursed ? ` <span class="chip Ongoing">Reimbursed</span>` : ` <span class="chip Proposal">Pending</span>`) : ""}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}
       </tbody><tfoot><tr><td colspan="5">Total</td><td class="num">${peso(monthTotal)}</td></tr></tfoot></table>` : `<div class="empty">No expenses logged this month.</div>`}
     </div>
     <div style="display:flex;flex-direction:column;gap:16px">
@@ -160,7 +161,7 @@ function expenseForm(c) {
     <label class="f" for="x-amt">Amount (₱)<input id="x-amt" name="amount" type="number" min="0" step="0.01" required value="${c.amount || ""}"></label>
     <label class="f" for="c-stage">Stage<select id="c-stage" name="stage">${STAGES.map(x => `<option ${x === st0 ? "selected" : ""}>${x}</option>`).join("")}</select></label>
     <label class="f" for="c-cat">Category<select id="c-cat" name="category">${(cats.includes(c.category) ? cats : [c.category, ...cats]).map(x => `<option ${x === c.category ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
-    <label class="f" for="x-paid">Paid from<select id="x-paid" name="paidFrom"><option value="petty_cash" ${c.paidFrom !== "out_of_pocket" ? "selected" : ""}>Petty cash</option><option value="out_of_pocket" ${c.paidFrom === "out_of_pocket" ? "selected" : ""}>Out of pocket (my own money)</option></select></label>
+    <label class="f" for="x-paid">Paid from<select id="x-paid" name="paidFrom">${[["petty_cash", "Petty cash"], ["out_of_pocket", "Out of pocket (my own money)"], ["company", "Paid by the company"], ["client", "Paid by the client (LDM reimburses)"]].map(([v, t]) => `<option value="${v}" ${v === (c.paidFrom || "petty_cash") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     <label class="f wide" for="c-desc">Description<input id="c-desc" name="description" placeholder="e.g. 20 bags cement, tricycle for deliveries" value="${esc(c.description)}"></label>
   </form>
   <div class="row end"><div>${c.id ? `<button class="btn danger" data-a="del-exp" data-id="${c.id}">Delete entry</button>` : ""}</div>
@@ -249,7 +250,8 @@ function vReport() {
   <div class="row">
     ${canEdit ? `<button class="btn" data-a="edit-report" data-id="${r.id}">Edit</button>` : ""}
     ${IS("employee") && mine && ["draft", "returned"].includes(r.status) ? `<button class="btn primary" data-a="submit-report" data-id="${r.id}">Submit for approval</button>` : ""}
-    <button class="btn" data-a="print">Print or save as PDF</button></div></div>
+    <button class="btn" data-a="print">Print or save as PDF</button>
+    ${IS("owner") ? `<button class="btn danger" data-a="del-report" data-id="${r.id}">Delete report</button>` : ""}</div></div>
   ${r.status === "returned" && r.owner_note && !IS("client") ? `<div class="answer no-print"><b style="font-size:15px">Returned with a note:</b> ${esc(r.owner_note)}</div>` : ""}
   ${IS("owner") && r.status === "submitted" ? `<div class="card no-print"><h2>Review</h2><label class="f" for="rv-note">Note to the employee (needed only when returning)<textarea id="rv-note" rows="2"></textarea></label>
     <div class="row"><button class="btn primary" data-a="approve-report" data-id="${r.id}">Approve and share with client</button><button class="btn" data-a="return-report" data-id="${r.id}">Return for changes</button></div></div>` : ""}
@@ -291,7 +293,7 @@ function reportForm(r) {
   <div class="ph-edit" id="ph-edit">${photos.map(ph => `<figure><img src="${esc(ph.url)}" alt=""><input value="${esc(ph.caption)}" placeholder="Caption" data-cap="${ph.id}" aria-label="Photo caption"><button type="button" class="btn sm danger" data-a="del-photo" data-id="${ph.id}">Remove</button></figure>`).join("")}</div>
   <label class="btn" for="r-photos" style="align-self:flex-start">Add photos<input id="r-photos" type="file" accept="image/*" multiple hidden></label>
   <p class="small muted" id="ph-status">Photos are resized before upload. Adding photos saves the report as a draft.</p>
-  <div class="row end"><div>${RDRAFT.id && RDRAFT.status !== "approved" ? `<button class="btn danger" data-a="del-report" data-id="${RDRAFT.id}">Delete report</button>` : ""}</div>
+  <div class="row end"><div>${RDRAFT.id && (RDRAFT.status !== "approved" || IS("owner")) ? `<button class="btn danger" data-a="del-report" data-id="${RDRAFT.id}">Delete report</button>` : ""}</div>
   <div class="row"><button class="btn" data-a="close">Cancel</button><button class="btn" data-a="save-report" data-s="draft">Save draft</button>${IS("employee") ? `<button class="btn primary" data-a="save-report" data-s="submitted">Submit for approval</button>` : `<button class="btn primary" data-a="save-report" data-s="approved">Save and approve</button>`}</div></div>`);
 }
 
@@ -372,6 +374,7 @@ function vHome() {
           <div class="dbar"><i style="width:${d.progress}%"></i></div>
           <div class="phs">${ap.map(ph => { const v = p.phaseProgress ? phasePct(p, ph) : (PHASES.indexOf(ph) < PHASES.indexOf(d.phase) ? 100 : 0); return `<div class="phr ${v >= 100 ? "done" : ph === d.phase ? "cur" : ""}"><span>${esc(ph)}</span><div class="bar" style="height:8px"><i style="width:${v}%;background:${v >= 100 ? "var(--ink)" : "var(--brand)"}"></i></div><b>${v}%</b></div>`; }).join("")}</div>
           <div class="dmeta">${mob ? `<span>Site mobilization <b>${fmtD(p.mobilizationDate)}</b></span>` : p.startDate ? `<span>Started <b>${fmtD(p.startDate)}</b></span>` : ""}<span>Target completion <b>${p.endDate ? fmtD(p.endDate) : "to be confirmed"}</b></span></div>
+          ${S.billings.filter(b => b.project_id === p.id && b.status === "sent").map(b => `<div class="answer" style="border-left-color:var(--warn);background:var(--warn-soft)"><b style="font-size:15px">Progress Billing No. ${b.billing_no} is waiting for your review.</b> Amount due ${peso(b.amount_due)}. <a href="#" data-a="open-bill" data-id="${b.id}">Review billing</a></div>`).join("")}
           ${latest ? `<div class="answer"><b style="font-size:15px">Latest report:</b> ${weekRange(latest)} <a href="#" data-a="open-report" data-id="${latest.id}">Read report</a></div>` : ""}
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
@@ -379,6 +382,9 @@ function vHome() {
           <div class="dbar"><i style="width:${contract ? Math.min(100, paid / contract * 100) : 0}%"></i></div>
           <h3 class="sec" style="border:none;padding:0">Payment history</h3>
           ${pays.length ? `<table><thead><tr><th>Date</th><th>For</th><th>Type</th><th>Reference</th><th class="num">Amount</th></tr></thead><tbody>${pays.map(c => `<tr><td class="small">${fmtD(c.date)}</td><td class="small">${esc(c.stage)}</td><td class="small">${esc(c.type)}</td><td class="small">${esc(c.reference)}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No payments recorded yet.</div>`}
+          ${(() => { const rb = S.costs.filter(c => c.projectId === p.id && c.paidFrom === "client"); if (!rb.length) return ""; const pend = rb.filter(c => !c.reimbursed).reduce((a, c) => a + c.amount, 0);
+            return `<h3 class="sec" style="border:none;padding:0">Expenses you paid that LDM reimburses</h3>${pend ? `<div class="answer"><b style="font-size:15px">${peso(pend)}</b> to be reimbursed to you</div>` : ""}
+            <table><thead><tr><th>Date</th><th>Item</th><th>Status</th><th class="num">Amount</th></tr></thead><tbody>${rb.map(c => `<tr><td class="small">${fmtD(c.date)}</td><td class="small">${esc(c.category)}${c.description ? " · " + esc(c.description) : ""}</td><td>${c.reimbursed ? `<span class="chip Ongoing">Reimbursed</span>` : `<span class="chip Proposal">To be reimbursed</span>`}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}</tbody></table>`; })()}
         </div>
       </div></div>`;
   }).join("");
@@ -456,24 +462,25 @@ document.addEventListener("change", e => {
 
 /* ---------- navigation by role ---------- */
 const NAV = {
-  owner: [["overview", "Dashboard"], ["progress", "Project Progress"], ["reports", "Weekly Reports"], ["clients", "Clients"], ["phases", "Projects & Phases"], ["capacity", "Capacity by Quarter"], ["costs", "Monthly Costs"], ["collections", "Collections"], ["profit", "Profit"], ["petty", "Petty Cash"], ["team", "Team & Access"]],
+  owner: [["overview", "Dashboard"], ["progress", "Project Progress"], ["reports", "Weekly Reports"], ["clients", "Clients"], ["phases", "Projects & Phases"], ["capacity", "Capacity by Quarter"], ["costs", "Monthly Costs"], ["collections", "Collections"], ["billing", "Progress Billing"], ["profit", "Profit"], ["petty", "Petty Cash"], ["team", "Team & Access"]],
   employee: [["progress", "Progress"], ["running", "Running Cost"], ["reports", "Weekly Reports"]],
-  client: [["home", "My Project"], ["reports", "Progress Reports"]]
+  client: [["home", "My Project"], ["billing", "Billing"], ["reports", "Progress Reports"]]
 };
 const VIEWS = { overview: vOverview, progress: vProgress, clients: vClients, phases: vPhases, capacity: vCapacity, costs: vCosts, collections: vCollections, profit: vProfit,
-  running: vRunning, petty: vPetty, reports: vReports, report: vReport, team: vTeam, home: vHome };
-function allowed() { return (NAV[ROLE] || []).map(x => x[0]).concat(["report"]); }
+  running: vRunning, petty: vPetty, reports: vReports, report: vReport, team: vTeam, home: vHome, billing: vBilling, bill: vBill };
+function allowed() { return (NAV[ROLE] || []).map(x => x[0]).concat(["report"], IS("employee") ? [] : ["bill"]); }
 function current() { const h = location.hash.slice(1); return allowed().includes(h) && VIEWS[h] ? h : (NAV[ROLE] || [["overview"]])[0][0]; }
 function buildNav() {
-  document.getElementById("nav").innerHTML = (NAV[ROLE] || []).map(([k, t]) => `<a href="#${k}" data-v="${k}">${t}${k === "reports" && IS("owner") ? ` <span class="n" id="n-rep"></span>` : ""}</a>`).join("");
+  document.getElementById("nav").innerHTML = (NAV[ROLE] || []).map(([k, t]) => `<a href="#${k}" data-v="${k}">${t}${k === "reports" && IS("owner") ? ` <span class="n" id="n-rep"></span>` : ""}${k === "billing" ? ` <span class="n" id="n-bill"></span>` : ""}</a>`).join("");
   document.getElementById("sync").innerHTML = `<b>${esc(ME.full_name || ME.email)}</b><br><span>${{ owner: "Owner", employee: "Employee", client: "Client" }[ROLE]}</span> · <a href="#" data-a="signout">Sign out</a>`;
   document.body.dataset.role = ROLE;
 }
 function render() {
   if (!ROLE) return;
   const v = current();
-  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v || (v === "report" && a.dataset.v === "reports")));
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v || (v === "report" && a.dataset.v === "reports") || (v === "bill" && a.dataset.v === "billing")));
   const nr = document.getElementById("n-rep"); if (nr) nr.textContent = S.reports.filter(r => r.status === "submitted").length || "";
+  const nb = document.getElementById("n-bill"); if (nb) nb.textContent = S.billings.filter(b => IS("client") ? b.status === "sent" : b.status === "disputed").length || "";
   if (!S.loaded) { document.getElementById("view").innerHTML = `<div class="empty">Loading…</div>`; return; }
   const focusId = document.activeElement && document.activeElement.id;
   document.getElementById("view").innerHTML = VIEWS[v]();

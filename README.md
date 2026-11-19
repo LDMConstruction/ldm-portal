@@ -23,6 +23,16 @@ Setup takes about 20 minutes. You need a free **Supabase** account (database, lo
 2. When the project is ready, open **SQL Editor** in the left menu, click **New query**, paste the whole of `supabase/schema.sql`, and click **Run**. You should see "Success. No rows returned."
 3. Click **New query** again, paste `supabase/seed.sql` (your four current projects), and click **Run**.
 
+### Updates
+
+When the portal gets new features, run the matching update file once in the SQL Editor, in order:
+
+| File | Adds |
+|---|---|
+| `supabase/update-002.sql` | Terminated status, Paid by company and Paid by client on expenses, client reimbursements, progress billing |
+
+Update files are safe to run again if you're not sure whether you already ran one.
+
 ## 2. Create your owner account first
 
 The first account ever created becomes the **owner**. Do this before sharing the link with anyone.
