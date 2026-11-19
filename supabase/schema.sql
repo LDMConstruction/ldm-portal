@@ -15,7 +15,7 @@ create table public.profiles (
 );
 
 -- First account ever created becomes the owner; everyone after starts as pending.
-create or replace function public.handle_new_user()
+create function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (id, email, full_name, role)
@@ -31,12 +31,12 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
-create or replace function public.my_role()
+create function public.my_role()
 returns public.app_role language sql stable security definer set search_path = public as $$
   select role from public.profiles where id = auth.uid()
 $$;
 
-create or replace function public.is_owner()
+create function public.is_owner()
 returns boolean language sql stable security definer set search_path = public as $$
   select coalesce((select role = 'owner' from public.profiles where id = auth.uid()), false)
 $$;
@@ -72,7 +72,7 @@ create table public.project_members (
   primary key (project_id, user_id)
 );
 
-create or replace function public.is_member(pid text)
+create function public.is_member(pid text)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.project_members where project_id = pid and user_id = auth.uid())
 $$;
@@ -87,7 +87,7 @@ create table public.project_finance (
 );
 
 -- Employees may only change progress fields on projects they are assigned to.
-create or replace function public.guard_project_update()
+create function public.guard_project_update()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   new.updated_at := now();
@@ -118,7 +118,7 @@ create table public.costs (
 );
 
 -- Employees cannot mark their own out of pocket expenses as reimbursed.
-create or replace function public.guard_cost_write()
+create function public.guard_cost_write()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if public.is_owner() then return new; end if;
@@ -182,7 +182,7 @@ create table public.reports (
 );
 
 -- Employees can save drafts and submit; only the owner approves or returns.
-create or replace function public.guard_report_write()
+create function public.guard_report_write()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   new.updated_at := now();
@@ -227,7 +227,7 @@ insert into public.settings (id) values (1);
 
 -- ---------------------------------------------------------------- client summary
 -- Clients see only their contract total and what they have paid, never costs.
-create or replace function public.client_summary()
+create function public.client_summary()
 returns table (project_id text, contract numeric, design_contract numeric, construction_contract numeric, paid numeric)
 language sql stable security definer set search_path = public as $$
   select p.id,
@@ -240,7 +240,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Names of teammates for report bylines (no emails or roles exposed).
-create or replace function public.people_names()
+create function public.people_names()
 returns table (id uuid, full_name text)
 language sql stable security definer set search_path = public as $$
   select id, coalesce(nullif(full_name, ''), split_part(email, '@', 1)) from public.profiles
