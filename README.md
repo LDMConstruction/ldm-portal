@@ -30,6 +30,7 @@ When the portal gets new features, run the matching update file once in the SQL 
 | File | Adds |
 |---|---|
 | `supabase/update-002.sql` | Terminated status, Paid by company and Paid by client on expenses, client reimbursements, progress billing |
+| `supabase/update-003.sql` | Progress billing in the LDM letter and General Construction Report format, letterhead and bank details |
 
 Update files are safe to run again if you're not sure whether you already ran one.
 
