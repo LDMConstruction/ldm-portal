@@ -41,7 +41,7 @@ async function loadAll() {
     q(sb.from("projects").select("*").order("created_at")),
     q(sb.from("settings").select("*").maybeSingle())
   ]);
-  if (settings) { S.settings = { capacity: settings.capacity, assumedMonths: settings.assumed_months, releaseMonths: settings.release_months }; S.company = settings; }
+  if (settings) S.settings = { capacity: settings.capacity, assumedMonths: settings.assumed_months, releaseMonths: settings.release_months };
   let fins = [];
   S.costs = []; S.collections = []; S.petty = []; S.reports = []; S.summary = []; S.billings = [];
   if (IS("owner")) {
