@@ -45,12 +45,13 @@ async function loadAll() {
   let fins = [];
   S.costs = []; S.collections = []; S.petty = []; S.reports = []; S.summary = []; S.billings = [];
   if (IS("owner")) {
-    const [f, c, k, p, r, pr, m, bl] = await Promise.all([
+    const [f, c, k, p, r, pr, m, bl, pp, ms] = await Promise.all([
       q(sb.from("project_finance").select("*")), q(sb.from("costs").select("*").order("date", { ascending: false })),
       q(sb.from("collections").select("*")), q(sb.from("petty_cash").select("*").order("date", { ascending: false })),
       q(sb.from("reports").select("*").order("week_start", { ascending: false })), q(sb.from("profiles").select("*").order("created_at")),
-      q(sb.from("project_members").select("*")), q(sb.from("progress_billings").select("*").order("billing_no"))]);
-    S.billings = bl; fins = f; S.costs = c.map(fromCost); S.collections = k.map(fromCol); S.petty = p.map(fromPetty); S.reports = r; S.profiles = pr; S.members = m;
+      q(sb.from("project_members").select("*")), q(sb.from("progress_billings").select("*").order("billing_no")),
+      q(sb.from("proposals").select("*").order("created_at", { ascending: false })), q(sb.from("project_milestones").select("*").order("sort"))]);
+    S.proposals = pp; S.milestones = ms; S.billings = bl; fins = f; S.costs = c.map(fromCost); S.collections = k.map(fromCol); S.petty = p.map(fromPetty); S.reports = r; S.profiles = pr; S.members = m;
     S.names = Object.fromEntries(pr.map(x => [x.id, x.full_name || (x.email || "").split("@")[0]]));
   } else if (IS("employee")) {
     const [c, p, r, m, n] = await Promise.all([
@@ -58,10 +59,11 @@ async function loadAll() {
       q(sb.from("reports").select("*").order("week_start", { ascending: false })), q(sb.from("project_members").select("*")), q(sb.rpc("people_names"))]);
     S.costs = c.map(fromCost); S.petty = p.map(fromPetty); S.reports = r; S.members = m; S.names = Object.fromEntries(n.map(x => [x.id, x.full_name]));
   } else if (IS("client")) {
-    const [sum, k, r, n, bl, cc] = await Promise.all([q(sb.rpc("client_summary")), q(sb.from("collections").select("*").order("date", { ascending: false })),
+    const [sum, k, r, n, bl, cc, ms, cp] = await Promise.all([q(sb.rpc("client_summary")), q(sb.from("collections").select("*").order("date", { ascending: false })),
       q(sb.from("reports").select("*").order("week_start", { ascending: false })), q(sb.rpc("people_names")),
-      q(sb.from("progress_billings").select("*").order("billing_no")), q(sb.from("costs").select("*").order("date", { ascending: false }))]);
-    S.billings = bl; S.costs = cc.map(fromCost); S.summary = sum; S.collections = k.map(fromCol); S.reports = r; S.names = Object.fromEntries(n.map(x => [x.id, x.full_name]));
+      q(sb.from("progress_billings").select("*").order("billing_no")), q(sb.from("costs").select("*").order("date", { ascending: false })),
+      q(sb.from("project_milestones").select("*").order("sort")), q(sb.rpc("client_proposals"))]);
+    S.milestones = ms; S.clientProposals = cp; S.billings = bl; S.costs = cc.map(fromCost); S.summary = sum; S.collections = k.map(fromCol); S.reports = r; S.names = Object.fromEntries(n.map(x => [x.id, x.full_name]));
   }
   S.projects = projects.map(p => fromProject(p, fins.find(f => f.project_id === p.id)));
   S.loaded = true;
@@ -385,6 +387,7 @@ function vHome() {
           ${(() => { const rb = S.costs.filter(c => c.projectId === p.id && c.paidFrom === "client"); if (!rb.length) return ""; const pend = rb.filter(c => !c.reimbursed).reduce((a, c) => a + c.amount, 0);
             return `<h3 class="sec" style="border:none;padding:0">Expenses you paid that LDM reimburses</h3>${pend ? `<div class="answer"><b style="font-size:15px">${peso(pend)}</b> to be reimbursed to you</div>` : ""}
             <table><thead><tr><th>Date</th><th>Item</th><th>Status</th><th class="num">Amount</th></tr></thead><tbody>${rb.map(c => `<tr><td class="small">${fmtD(c.date)}</td><td class="small">${esc(c.category)}${c.description ? " · " + esc(c.description) : ""}</td><td>${c.reimbursed ? `<span class="chip Ongoing">Reimbursed</span>` : `<span class="chip Proposal">To be reimbursed</span>`}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}</tbody></table>`; })()}
+          ${clientScheduleCard(p)}
         </div>
       </div></div>`;
   }).join("");
@@ -462,24 +465,25 @@ document.addEventListener("change", e => {
 
 /* ---------- navigation by role ---------- */
 const NAV = {
-  owner: [["overview", "Dashboard"], ["progress", "Project Progress"], ["reports", "Weekly Reports"], ["clients", "Clients"], ["phases", "Projects & Phases"], ["capacity", "Capacity by Quarter"], ["costs", "Monthly Costs"], ["collections", "Collections"], ["billing", "Progress Billing"], ["profit", "Profit"], ["petty", "Petty Cash"], ["team", "Team & Access"]],
+  owner: [["overview", "Dashboard"], ["proposals", "Proposals"], ["progress", "Project Progress"], ["reports", "Weekly Reports"], ["clients", "Clients"], ["phases", "Projects & Phases"], ["capacity", "Capacity by Quarter"], ["costs", "Monthly Costs"], ["collections", "Collections"], ["billing", "Progress Billing"], ["profit", "Profit"], ["petty", "Petty Cash"], ["team", "Team & Access"]],
   employee: [["progress", "Progress"], ["running", "Running Cost"], ["reports", "Weekly Reports"]],
   client: [["home", "My Project"], ["billing", "Billing"], ["reports", "Progress Reports"]]
 };
 const VIEWS = { overview: vOverview, progress: vProgress, clients: vClients, phases: vPhases, capacity: vCapacity, costs: vCosts, collections: vCollections, profit: vProfit,
-  running: vRunning, petty: vPetty, reports: vReports, report: vReport, team: vTeam, home: vHome, billing: vBilling, bill: vBill };
-function allowed() { return (NAV[ROLE] || []).map(x => x[0]).concat(["report"], IS("employee") ? [] : ["bill"]); }
+  running: vRunning, petty: vPetty, reports: vReports, report: vReport, team: vTeam, home: vHome, billing: vBilling, bill: vBill, proposals: vProposals, proposal: vProposal };
+function allowed() { return (NAV[ROLE] || []).map(x => x[0]).concat(["report"], IS("employee") ? [] : ["bill", "proposal"]); }
 function current() { const h = location.hash.slice(1); return allowed().includes(h) && VIEWS[h] ? h : (NAV[ROLE] || [["overview"]])[0][0]; }
 function buildNav() {
-  document.getElementById("nav").innerHTML = (NAV[ROLE] || []).map(([k, t]) => `<a href="#${k}" data-v="${k}">${t}${k === "reports" && IS("owner") ? ` <span class="n" id="n-rep"></span>` : ""}${k === "billing" ? ` <span class="n" id="n-bill"></span>` : ""}</a>`).join("");
+  document.getElementById("nav").innerHTML = (NAV[ROLE] || []).map(([k, t]) => `<a href="#${k}" data-v="${k}">${t}${k === "reports" && IS("owner") ? ` <span class="n" id="n-rep"></span>` : ""}${k === "billing" ? ` <span class="n" id="n-bill"></span>` : ""}${k === "proposals" ? ` <span class="n" id="n-prop"></span>` : ""}</a>`).join("");
   document.getElementById("sync").innerHTML = `<b>${esc(ME.full_name || ME.email)}</b><br><span>${{ owner: "Owner", employee: "Employee", client: "Client" }[ROLE]}</span> · <a href="#" data-a="signout">Sign out</a>`;
   document.body.dataset.role = ROLE;
 }
 function render() {
   if (!ROLE) return;
   const v = current();
-  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v || (v === "report" && a.dataset.v === "reports") || (v === "bill" && a.dataset.v === "billing")));
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v || (v === "report" && a.dataset.v === "reports") || (v === "bill" && a.dataset.v === "billing") || (v === "proposal" && a.dataset.v === (IS("owner") ? "proposals" : "home"))));
   const nr = document.getElementById("n-rep"); if (nr) nr.textContent = S.reports.filter(r => r.status === "submitted").length || "";
+  const np = document.getElementById("n-prop"); if (np) np.textContent = S.proposals.filter(p => p.status === "accepted").length || "";
   const nb = document.getElementById("n-bill"); if (nb) nb.textContent = S.billings.filter(b => IS("client") ? b.status === "sent" : b.status === "disputed").length || "";
   if (!S.loaded) { document.getElementById("view").innerHTML = `<div class="empty">Loading…</div>`; return; }
   const focusId = document.activeElement && document.activeElement.id;
@@ -543,8 +547,10 @@ async function enter(user) {
   const cfg = window.LDM_CONFIG || {};
   if (!cfg.supabaseUrl || !cfg.supabaseAnonKey || !window.supabase) { showAuth("setup"); return; }
   sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  const ptoken = new URLSearchParams(location.search).get("proposal");
+  if (ptoken && /^[0-9a-f-]{36}$/i.test(ptoken)) { await showPublicProposal(ptoken); return; }
   sb.auth.onAuthStateChange(ev => { if (ev === "PASSWORD_RECOVERY") showAuth("newpass"); });
   const { data: { session } } = await sb.auth.getSession();
   if (session && (AUTH_TYPE === "recovery" || AUTH_TYPE === "invite")) { showAuth("newpass"); return; }
-  if (session) await enter(session.user); else showAuth("login");
+  if (session) await enter(session.user); else showAuth(location.hash === "#signup" ? "signup" : "login");
 })();
