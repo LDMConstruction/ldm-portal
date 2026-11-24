@@ -366,3 +366,29 @@ input[type=month] { background: var(--panel); border: 1px solid var(--line); bor
 }
 .sline { display: block; border-bottom: 1px solid #000; height: 36px; margin-bottom: 4px; }
 .accepted { color: #087f7b; font-weight: 700; font-size: 12.5px; }
+/* ---------- construction cost proposal ---------- */
+.cd-h { font-size: 12.5px; font-weight: 700; text-decoration: underline; margin: 6px 0 0; }
+.cd-cost td.r, .cd-t td.r { text-align: right; white-space: nowrap; }
+.cd-note { font-style: italic; font-size: 11.5px; }
+.cd-bul li::before { content: "•"; }
+.cd-sum { border-collapse: collapse; width: 100%; font-size: 12px; }
+.cd-sum td { border: 1px solid #9aa0ab; padding: 4px 8px; text-align: right; font-weight: 700; color: #000; }
+.cd-sum td:last-child { width: 32%; }
+.cd-sum tr.g td { background: #2d3a66; color: #fff; } .cd-sum tr.g td:last-child { color: #f6c000; }
+.cd-t { border-collapse: collapse; width: 100%; font-size: 11px; }
+.cd-t th { background: #2d3a66; color: #fff; font-size: 10.5px; padding: 3px 6px; border: 1px solid #fff; text-transform: none; letter-spacing: 0; text-align: center; }
+.cd-t td { border: 1px solid #9aa0ab; padding: 3px 6px; color: #000; vertical-align: middle; }
+.cd-t td.c { text-align: center; }
+.cd-pb td:nth-child(2) { white-space: nowrap; }
+.cf-head, .cf-row { display: grid; grid-template-columns: 30px 1fr 1.3fr 70px 70px 110px 120px auto; gap: 6px; align-items: start; }
+.cf-head { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.cf-row { margin-bottom: 6px; }
+.cf-row input, .cf-row textarea, .cf-row select { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; font: inherit; font-size: 13.5px; }
+.cf-row input[type=number] { text-align: right; }
+.cf-line { font-family: var(--mono); font-size: 12.5px; text-align: right; padding-top: 8px; }
+@media (max-width: 760px) { .cf-head { display: none; } .cf-row { grid-template-columns: 26px 1fr 1fr auto; } .cf-row textarea { grid-column: 2 / -1; } }
+@media print { .cd-t th, .cd-sum tr.g td { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .cd-t tr { break-inside: avoid; } }
+.cd-cost { table-layout: fixed; }
+.cd-cost th:nth-child(1) { width: 6%; } .cd-cost th:nth-child(2) { width: 19%; } .cd-cost th:nth-child(4), .cd-cost th:nth-child(5) { width: 7%; }
+.cd-cost td:nth-child(2) { width: auto; }
+.cd-cost th:last-child { width: 17%; }

@@ -58,6 +58,7 @@ function propLink(p) { return location.origin + location.pathname + "?proposal="
 
 /* ---------- the proposal document (same layout as the Word proposal) ---------- */
 function proposalDoc(p) {
+  if (p.kind === "Construction") return constructionDoc(p);
   const c = { ...designTemplate(), ...(p.content || {}) };
   const accepted = ["accepted", "onboarded"].includes(p.status) && p.accepted_name;
   return `<article class="pdoc">
@@ -100,13 +101,13 @@ function vProposals() {
   const won = all.filter(p => ["accepted", "onboarded"].includes(p.status));
   const thisMonth = all.filter(p => (p.proposal_date || "").startsWith(ym(new Date())));
   const row = p => { const e = propExpiry(p), st = propStatus(p);
-    return `<tr class="click" data-a="open-prop" data-id="${p.id}"><td><b>${esc(p.client_name || "—")}</b><div class="small muted">${esc(p.proposal_no)} · ${esc(p.title)}</div></td>
+    return `<tr class="click" data-a="open-prop" data-id="${p.id}"><td><b>${esc(p.client_name || "—")}</b><div class="small muted">${esc(p.proposal_no)} · ${esc(p.kind || "Design")} · ${esc(p.title)}</div></td>
       <td class="small">${esc(p.location)}</td><td class="small">${fmtD(p.proposal_date)}${st === "sent" && e ? `<div class="muted">valid until ${fmtD(ymd(e))}</div>` : ""}</td><td>${pchip(p)}</td><td class="num">${peso(p.total)}</td>
       <td>${p.status === "accepted" ? `<button class="btn sm primary" data-a="onboard-prop" data-id="${p.id}">Onboard</button>` : p.project_id ? `<a href="#" class="small" data-a="goto-project" data-id="${p.project_id}">Open project</a>` : ""}</td></tr>`; };
   const group = (title, list, empty) => `<div class="card scroll"><h2>${title} (${list.length})</h2>${list.length ? `<table><thead><tr><th>Client and project</th><th>Location</th><th>Date</th><th>Status</th><th class="num">Amount</th><th></th></tr></thead><tbody>${list.map(row).join("")}</tbody></table>` : `<div class="empty">${empty}</div>`}</div>`;
   return `
   <div class="head"><div><h1>Proposals</h1><p class="sub">Prepare design cost proposals, send the client a link to accept, then onboard them into a project.</p></div>
-  <button class="btn primary" data-a="new-prop">New design proposal</button></div>
+  <div class="row"><button class="btn primary" data-a="new-prop">New design proposal</button><button class="btn primary" data-a="new-cprop">New construction proposal</button></div></div>
   <div class="grid-tiles">
     <div class="tile"><span class="k">Waiting for client</span><span class="v">${by("sent").length}</span><span class="h">${peso(sum(by("sent")))} in open proposals</span></div>
     <div class="tile hi"><span class="k">Accepted, to onboard</span><span class="v">${by("accepted").length}</span><span class="h">${peso(sum(by("accepted")))}</span></div>
@@ -224,7 +225,7 @@ async function saveProposal(status) {
 function onboardForm(p) {
   const last = (p.client_name || "").replace(/^(mr|mrs|ms|engr|arch|dr|spouses)\.?\s+/i, "").trim().split(/\s+/).pop() || "";
   openModal(`<h2>Onboard ${esc(p.client_name)}</h2>
-  <p class="small muted" style="margin:0">This creates the project in Onboarded status, Design phase, with a design contract of ${peso(p.total)} and the ${p.content && p.content.payments ? p.content.payments.length : 0} payment milestones from the proposal. ${p.client_email ? `When the client creates an account with ${esc(p.client_email)}, they see their project automatically.` : "No client email on the proposal, so link their account in Team & Access after they sign up."}</p>
+  <p class="small muted" style="margin:0">This creates the project in Onboarded status, Design phase, ${p.kind === "Construction" && p.content && p.content.finance ? `with a construction contract of ${peso(p.content.finance.construction)}, design and services of ${peso(p.content.finance.design)}, and the ${(p.content.milestones || []).length} payments from the cost schedule` : `with a design contract of ${peso(p.total)} and the ${p.content && p.content.payments ? p.content.payments.length : 0} payment milestones from the proposal`}. ${p.client_email ? `When the client creates an account with ${esc(p.client_email)}, they see their project automatically.` : "No client email on the proposal, so link their account in Team & Access after they sign up."}</p>
   <label class="f" for="ob-name">Project name<input id="ob-name" value="${esc(last ? last + " Residence" : p.title)}"></label>
   <div class="row end"><div></div><div class="row"><button class="btn" data-a="close">Cancel</button><button class="btn primary" data-a="onboard-go" data-id="${p.id}">Onboard client</button></div></div>`);
 }
@@ -242,7 +243,7 @@ function clientScheduleCard(p) {
       ${rows.map(m => { cum += +m.amount; const done = paid >= cum - 0.5; const part = !done && paid > cum - m.amount + 0.5;
         return `<tr><td class="small">${esc(m.label)} · ${+m.percent}%</td><td class="small">${esc(m.milestone)}</td><td class="num">${peso(m.amount)}</td><td>${done ? `<span class="chip Ongoing">Paid</span>` : part ? `<span class="chip Proposal">Partly paid</span>` : `<span class="chip OnHold">Due</span>`}</td></tr>`; }).join("")}</tbody></table>`;
   });
-  return html + props.map(x => `<p class="small" style="margin:0">Your ${esc((x.content && x.content.kind) || "design")} proposal ${esc(x.proposal_no)}, accepted ${fmtD((x.responded_at || "").slice(0, 10))}. <a href="#" data-a="open-prop" data-id="${x.id}">View proposal</a></p>`).join("");
+  return html + props.map(x => `<p class="small" style="margin:0">Your ${esc((x.kind || "design").toLowerCase())} proposal ${esc(x.proposal_no)}, accepted ${fmtD((x.responded_at || "").slice(0, 10))}. <a href="#" data-a="open-prop" data-id="${x.id}">View proposal</a></p>`).join("");
 }
 
 /* ---------- public page: client opens the proposal link ---------- */
@@ -259,7 +260,7 @@ async function showPublicProposal(token) {
         <p class="small">Create your client account to follow your project's progress, payments and reports. Use the same email LDM has for you.</p><div class="row"><a class="btn primary" href="${location.pathname}#signup">Create my client account</a><a class="btn" href="${location.pathname}">Sign in</a></div>`
       : p.status === "declined" ? `<h2>Proposal declined</h2><p>You declined this proposal. If you change your mind or would like a revised proposal, contact LDM at 0945 681 0515.</p>`
       : st === "expired" ? `<h2>This proposal has expired</h2><p>It was valid for ${p.valid_days} days from ${longDate(p.proposal_date)}. Please contact LDM at 0945 681 0515 for an updated proposal.</p>`
-      : `<h2>Your design cost proposal</h2><p class="small muted" style="margin:0">Please review the scope, terms and payment schedule below. Valid until ${longDate(ymd(propExpiry(p)))}.</p>
+      : `<h2>Your ${esc((p.kind || "Design").toLowerCase())} cost proposal</h2><p class="small muted" style="margin:0">Please review the scope, terms and payment schedule below. Valid until ${longDate(ymd(propExpiry(p)))}.</p>
         <div id="pub-msg"></div>
         <label class="f" for="pub-name">Your full name<input id="pub-name" value="${esc(p.client_name)}" autocomplete="name"></label>
         <label class="checkrow"><input type="checkbox" id="pub-agree"> I have read and agree to the scope of work, terms and conditions, and payment schedule.</label>
@@ -279,8 +280,8 @@ document.addEventListener("click", async ev => {
   try {
     if (a === "new-prop") proposalForm();
     else if (a === "open-prop") { S.viewProposal = id; location.hash = "proposal"; render(); }
-    else if (a === "edit-prop") proposalForm(S.proposals.find(x => x.id === id));
-    else if (a === "dup-prop") proposalForm(S.proposals.find(x => x.id === id), true);
+    else if (a === "edit-prop") { const x = S.proposals.find(y => y.id === id); x.kind === "Construction" ? constructionForm(x) : proposalForm(x); }
+    else if (a === "dup-prop") { const x = S.proposals.find(y => y.id === id); x.kind === "Construction" ? constructionForm(x, true) : proposalForm(x, true); }
     else if (a === "pp-additem") { readProposalForm(); PDRAFT.content.items.push({ item: "", scopes: [] }); drawProposalForm(); }
     else if (a === "pp-rmitem") { readProposalForm(); PDRAFT.content.items.splice(+el.dataset.i, 1); drawProposalForm(); }
     else if (a === "pp-addpay") { readProposalForm(); PDRAFT.content.payments.push({ label: ORD(PDRAFT.content.payments.length + 1) + " Payment", pct: 0, milestone: "" }); drawProposalForm(); }
