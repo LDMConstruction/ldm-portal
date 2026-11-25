@@ -232,7 +232,7 @@ function onboardForm(p) {
 
 /* ---------- client: payment schedule and proposal on their project ---------- */
 function clientScheduleCard(p) {
-  const ms = S.milestones.filter(m => m.project_id === p.id).sort((a, b) => (a.stage > b.stage ? 1 : -1) || a.sort - b.sort);
+  const ms = S.milestones.filter(m => m.project_id === p.id).sort((a, b) => (a.stage === b.stage ? 0 : a.stage === "Design" ? -1 : 1) || a.sort - b.sort);
   const props = S.clientProposals.filter(x => x.project_id === p.id);
   if (!ms.length && !props.length) return "";
   let html = "";
