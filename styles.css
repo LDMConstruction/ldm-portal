@@ -419,3 +419,11 @@ input[type=month] { background: var(--panel); border: 1px solid var(--line); bor
 .phg span { font-family: var(--mono); color: var(--muted); }
 .phfh { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-top: 8px; }
 @media (max-width: 600px) { .jtrack { grid-template-columns: repeat(2, 1fr); row-gap: 14px; } .jtrack li::before { display: none; } }
+/* ---------- client: design and construction contracts ---------- */
+.ctr { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); }
+.ctr-h { display: flex; justify-content: space-between; align-items: baseline; }
+.ctr-n { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ctr-n div { display: flex; flex-direction: column; }
+.ctr-n span { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.ctr-n b { font: 700 18px var(--display); font-variant-numeric: tabular-nums; }
+.ctr .dbar { height: 8px; }

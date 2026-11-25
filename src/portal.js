@@ -383,8 +383,13 @@ function vHome() {
           ${latest ? `<div class="answer"><b style="font-size:15px">Latest report:</b> ${weekRange(latest)} <a href="#" data-a="open-report" data-id="${latest.id}">Read report</a></div>` : ""}
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <div class="grid-tiles"><div class="tile"><span class="k">Contract</span><span class="v">${peso(contract)}</span></div><div class="tile hi"><span class="k">Paid</span><span class="v">${peso(paid)}</span><span class="h">${contract ? Math.round(paid / contract * 100) + "% of contract" : ""}</span></div><div class="tile"><span class="k">Balance</span><span class="v">${peso(contract - paid)}</span></div></div>
-          <div class="dbar"><i style="width:${contract ? Math.min(100, paid / contract * 100) : 0}%"></i></div>
+          ${(() => { const pays0 = S.collections.filter(c => c.projectId === p.id);
+            const parts = [["Design contract", num(sm.design_contract), pays0.filter(c => c.stage === "Design").reduce((a, c) => a + c.amount, 0)],
+                           ["Construction contract", num(sm.construction_contract), pays0.filter(c => c.stage !== "Design").reduce((a, c) => a + c.amount, 0)]];
+            return parts.map(([label, ct, pd]) => `<div class="ctr"><div class="ctr-h"><b>${label}</b>${ct ? `<span class="small muted">${Math.round(pd / ct * 100)}% paid</span>` : ""}</div>
+              ${ct || pd ? `<div class="ctr-n"><div><span>Contract</span><b>${peso(ct)}</b></div><div><span>Paid</span><b>${peso(pd)}</b></div><div><span>Balance</span><b>${peso(ct - pd)}</b></div></div>
+              <div class="dbar"><i style="width:${ct ? Math.min(100, pd / ct * 100) : 0}%"></i></div>` : `<span class="small muted">${label === "Construction contract" ? "To follow once the construction contract is signed." : "Not part of this project."}</span>`}</div>`).join("") +
+              (num(sm.design_contract) && num(sm.construction_contract) ? `<p class="small muted" style="margin:0">Total contract ${peso(contract)} · paid ${peso(paid)} · balance ${peso(contract - paid)}</p>` : ""); })()}
           <h3 class="sec" style="border:none;padding:0">Payment history</h3>
           ${pays.length ? `<table><thead><tr><th>Date</th><th>For</th><th>Type</th><th>Reference</th><th class="num">Amount</th></tr></thead><tbody>${pays.map(c => `<tr><td class="small">${fmtD(c.date)}</td><td class="small">${esc(c.stage)}</td><td class="small">${esc(c.type)}</td><td class="small">${esc(c.reference)}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No payments recorded yet.</div>`}
           ${(() => { const rb = S.costs.filter(c => c.projectId === p.id && c.paidFrom === "client"); if (!rb.length) return ""; const pend = rb.filter(c => !c.reimbursed).reduce((a, c) => a + c.amount, 0);
