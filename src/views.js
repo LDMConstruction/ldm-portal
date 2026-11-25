@@ -327,6 +327,38 @@ function qCard(q, detail) {
   ${detail ? `<ul>${occ.map(p => `<li>${esc(p.name)}${span(p).assumed ? " *" : ""}</li>`).join("")}${tent.map(p => `<li><i>${esc(p.name)} (proposal)</i></li>`).join("")}</ul>` : ""}</div>`;
 }
 
+/* ---------- month-level capacity ---------- */
+function mOf(d) { return d.getFullYear() * 12 + d.getMonth(); }
+function mLabel(m, long) { return (long ? new Date(Math.floor(m / 12), m % 12, 1).toLocaleDateString("en-PH", { month: "long" }) : MONTHS[m % 12]) + " " + Math.floor(m / 12); }
+function holdsMonth(p, m) { const { s, release } = span(p); return release >= s && mOf(s) <= m && m <= mOf(release); }
+function monthUse(m) { return S.projects.filter(p => ACTIVE.has(p.status) && holdsMonth(p, m)); }
+function earliestMonth(months) {
+  const cap = +S.settings.capacity || 1, m0 = mOf(today()), need = Math.max(1, +months || 1);
+  for (let m = m0; m < m0 + 72; m++) { let ok = true; for (let k = 0; k < need; k++) if (monthUse(m + k).length >= cap) { ok = false; m += k; break; } if (ok) return m; }
+  return null;
+}
+function monthTimeline() {
+  const cap = +S.settings.capacity || 1, m0 = mOf(today());
+  const rows = S.projects.filter(p => ACTIVE.has(p.status) || p.status === "Proposal" || p.status === "On Hold")
+    .sort((a, b) => (p => p.status === "Proposal" ? 2 : p.status === "On Hold" ? 1 : 0)(a) - (p => p.status === "Proposal" ? 2 : p.status === "On Hold" ? 1 : 0)(b) || span(a).s - span(b).s);
+  const lastEnd = Math.max(m0 + 11, ...rows.map(p => mOf(span(p).e) + 2));
+  const n = Math.min(36, Math.max(12, lastEnd - m0 + 1));
+  const ms = Array.from({ length: n }, (_, k) => m0 + k);
+  const first = earliestMonth(S.dur);
+  const cell = (p, m) => { const sp = span(p), sm = mOf(sp.s), em = mOf(sp.e);
+    if (m < sm || m > em) return `<td class="mt-c"></td>`;
+    const kind = p.status === "Proposal" ? "tent" : p.status === "On Hold" ? "hold" : holdsMonth(p, m) ? "run" : "rel";
+    const tag = m === sm ? (p.mobilizationDate && mOf(parseD(p.mobilizationDate)) === m ? "Mob" : "Start") : m === em ? "End" : "";
+    const tip = `${p.name} · ${mLabel(m)} · ${kind === "run" ? "holds a slot" : kind === "rel" ? "still running, slot already open" : kind === "hold" ? "on hold, no slot" : "proposal, no slot yet"}`;
+    return `<td class="mt-c"><i class="mt-${kind}" title="${esc(tip)}">${tag}</i></td>`; };
+  return `<div class="card scroll"><div><h2>Month by month</h2><p class="small muted" style="margin:4px 0 0">Every month each project is running. Dark months hold one of the ${cap} slots; light months are the last stretch (Finishing or the final ${S.settings.releaseMonths} months) when the slot is already open. The bottom row shows how many slots are free each month.</p></div>
+  <div class="legend"><span style="--c:var(--ink)">Holds a slot</span><span style="--c:var(--line)">Running, slot open</span><span style="--c:var(--warn)">On hold</span><span style="--c:var(--accent-soft)">Proposal</span><span style="--c:var(--good)">Free slot</span></div>
+  ${rows.length ? `<table class="mtl"><thead><tr><th>Project</th>${ms.map(m => `<th class="${m % 12 === 0 ? "yr" : ""} ${m === first ? "first" : ""}">${MONTHS[m % 12]}${m % 12 === 0 || m === m0 ? `<small>${Math.floor(m / 12)}</small>` : ""}</th>`).join("")}</tr></thead><tbody>
+  ${rows.map(p => { const sp = span(p); return `<tr><td class="mt-n"><b class="click" data-a="edit" data-id="${p.id}" style="cursor:pointer">${esc(p.name)}</b><span class="small muted">${mLabel(mOf(sp.s))} to ${mLabel(mOf(sp.e))}${sp.assumed ? " *" : ""}${p.status !== "Ongoing" && p.status !== "Onboarded" ? " · " + esc(p.status) : ""}</span></td>${ms.map(m => cell(p, m)).join("")}</tr>`; }).join("")}
+  </tbody><tfoot><tr><td class="mt-n"><b>Free slots</b><span class="small muted">of ${cap}</span></td>${ms.map(m => { const free = cap - monthUse(m).length; return `<td class="mt-f ${free > 0 ? "ok" : free < 0 ? "over" : "full"} ${m === first ? "first" : ""}" title="${mLabel(m)}: ${monthUse(m).length} booked, ${free} free">${free}</td>`; }).join("")}</tr></tfoot></table>
+  ${first !== null && first < m0 + n ? `<p class="small">The <b>outlined</b> month is the earliest start for a ${S.dur} month project.</p>` : ""}` : `<div class="empty">No booked projects yet.</div>`}</div>`;
+}
+
 function vCapacity() {
   const q0 = qOf(today()), slot = earliestSlot(S.dur);
   const anyAssumed = S.projects.some(p => ACTIVE.has(p.status) && span(p).assumed);
@@ -339,8 +371,9 @@ function vCapacity() {
       <label class="f" for="dur">New project duration (months)<input id="dur" type="number" min="1" max="36" value="${S.dur}" data-local="dur"></label>
       <label class="f" for="asm">Assumed duration when no target date (months)<input id="asm" type="number" min="1" max="36" value="${S.settings.assumedMonths}" data-set="assumedMonths"></label>
     </div>
-    <div class="answer">${slot === null ? `<b>No opening</b> in the next six years at this capacity.` : `Earliest start for a ${S.dur} month project: <b>${qLabel(slot)}</b> <span class="muted">(from ${qStart(slot).toLocaleDateString("en-PH", { month: "long", year: "numeric" })})</span>`}</div>
+    <div class="answer">${(() => { const fm = earliestMonth(S.dur); return fm === null ? `<b>No opening</b> in the next six years at this capacity.` : `Earliest start for a ${S.dur} month project: <b>${mLabel(fm, true)}</b> <span class="muted">(${qLabel(Math.floor(fm / 12) * 4 + Math.floor((fm % 12) / 3))}, a slot stays free for all ${S.dur} months)</span>`; })()}</div>
   </div>
+  ${monthTimeline()}
   <div class="card"><h2>Next 8 quarters</h2>
     <div class="legend"><span style="--c:var(--ink)">Booked</span><span style="--c:var(--good-soft)">Open slot</span><span style="--c:var(--bad)">Over capacity</span></div>
     <div class="qgrid">${Array.from({ length: 8 }, (_, k) => qCard(q0 + k, true)).join("")}</div>
