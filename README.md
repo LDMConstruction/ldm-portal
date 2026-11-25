@@ -34,6 +34,7 @@ When the portal gets new features, run the matching update file once in the SQL 
 | `supabase/update-005.sql` | Construction cost proposals: onboarding sets the construction and services contracts and the full cost schedule |
 | `supabase/update-006.sql` | Payment requests: clients see only the payments you request |
 | `supabase/update-007.sql` | Construction proposals are ball park figures: one link for design plus construction ball park; onboarding creates design payments only |
+| `supabase/update-008.sql` | Design fee computation saved with each proposal, visible to the owner only |
 
 Update files are safe to run again if you're not sure whether you already ran one.
 

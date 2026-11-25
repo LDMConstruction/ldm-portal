@@ -158,6 +158,76 @@ function vProposal() {
   ${proposalDoc(p)}`;
 }
 
+
+/* ---------- owner only: design fee computation (never sent to the client) ---------- */
+function calcTemplate() {
+  return { area: 0, sets: 8, use_min: true, lines: [
+    { item: "Architectural Plan", scopes: ["Perspective", "Floor Plan", "Reflected Ceiling Plan", "Elevations & Sections", "Schedule of Doors & Windows", "Miscellaneous Details"], sheets: 7, basis: "sqm", rate: 400, min: 15000 },
+    { item: "Interior Design", scopes: ["Detailed Interior Perspectives"], sheets: 0, basis: "sqm", rate: 100, min: 0 },
+    { item: "Structural Plan", scopes: ["Foundation Plan", "Structural Framing Plan", "Beam & Column Details", "Stair Details", "Roof Framing Plan"], sheets: 8, basis: "sqm", rate: 130, min: 10000 },
+    { item: "Electrical Plan", scopes: ["Power & Lighting Layout", "Load Schedule & Single Line Diagram", "General Notes & Specifications"], sheets: 3, basis: "sqm", rate: 50, min: 10000 },
+    { item: "Plumbing & Sanitary Plan", scopes: ["Waterline Plumbing Layout", "Sanitary Plumbing Layout", "Schematic Plumbing Layout", "Septic Vault Details"], sheets: 3, basis: "sqm", rate: 50, min: 10000 },
+    { item: "Mechanical Plan", scopes: ["Air-conditioning Layout", "Exhaust Layout", "General Notes & Drawing Details"], sheets: 3, basis: "sqm", rate: 75, min: 0 },
+    { item: "Bill of Quantities", scopes: ["Detailed Cost Estimate"], sheets: 1, basis: "lot", rate: 5000, min: 0 },
+    { item: "Sign & Seal of Plans", scopes: ["Sign & Seal of Professionals"], sheets: 0, basis: "seal", rate: 1000, min: 0 },
+    { item: "Printing", scopes: ["Sets of Blueprint of Complete Set of Plans"], sheets: 0, basis: "print", rate: 50, min: 0 }] };
+}
+const CALC_BASIS = { sqm: "per sqm", lot: "per lot", seal: "per plan sheet", print: "per printed sheet" };
+function calcRun(k) {
+  const area = +k.area || 0, sets = +k.sets || 0;
+  const plans = (k.lines || []).filter(l => l.basis === "sqm" || l.basis === "lot").reduce((a, l) => a + (+l.sheets || 0), 0);
+  const rows = (k.lines || []).map(l => {
+    const qty = l.basis === "sqm" ? area : 1, sheets = l.basis === "seal" ? plans : l.basis === "print" ? plans * sets : +l.sheets || 0;
+    const base = l.basis === "seal" || l.basis === "print" ? sheets * (+l.rate || 0) : qty * (+l.rate || 0);
+    const cost = k.use_min && +l.min > base ? +l.min : base;
+    return { ...l, qty, unit: l.basis === "sqm" ? "sqm" : "lot", sheetsShown: sheets, base, cost: Math.round(cost * 100) / 100, minApplied: cost > base };
+  });
+  return { rows, plans, total: Math.round(rows.reduce((a, r) => a + r.cost, 0) * 100) / 100 };
+}
+function calcSection(p) {
+  const k = p.calc;
+  if (!k) return `<div class="sec">Fee computation <span class="small muted" style="font-weight:400;text-transform:none;letter-spacing:0">only you see this</span></div>
+    <div class="row"><button type="button" class="btn sm" data-a="pp-calc-on">Compute the design fee from floor area</button><span class="small muted">Architectural, structural, MEPF, BOQ, sign and seal, printing</span></div>`;
+  const cin = (i, key, val, w) => `<input data-pc="${i}" data-k="${key}" type="number" step="0.01" min="0" value="${esc(val ?? "")}" style="width:${w}px" aria-label="${key}">`;
+  return `<div class="sec">Fee computation <span class="small muted" style="font-weight:400;text-transform:none;letter-spacing:0">only you see this; the client sees the scope and total below</span></div>
+  <div class="fg">
+    <label class="f" for="pc-area">Floor area (sqm)<input id="pc-area" type="number" min="0" value="${esc(k.area || "")}"></label>
+    <label class="f" for="pc-sets">Blueprint sets<input id="pc-sets" type="number" min="0" value="${esc(k.sets)}"></label>
+    <label class="checkrow" style="align-self:end"><input type="checkbox" id="pc-min" ${k.use_min ? "checked" : ""}> Apply minimum fees</label>
+  </div>
+  <div class="scroll"><table class="pc-t"><thead><tr><th>Item</th><th>Basis</th><th class="num">Sheets</th><th class="num">Qty</th><th class="num">Unit cost</th><th class="num">Minimum</th><th class="num">Cost</th><th></th></tr></thead>
+    <tbody id="pc-body"></tbody><tfoot><tr><td colspan="6" class="num"><b>Computed design fee</b></td><td class="num"><b id="pc-total"></b></td><td></td></tr></tfoot></table></div>
+  <div class="row"><button type="button" class="btn sm" data-a="pp-calc-add">Add line</button><button type="button" class="btn sm primary" data-a="pp-calc-use">Use as total contract cost</button><span class="small" id="pc-diff"></span>
+    <button type="button" class="btn sm" data-a="pp-calc-off" style="margin-left:auto">Remove computation</button></div>`;
+}
+function drawCalcRows() {
+  const body = document.getElementById("pc-body"); if (!body || !PDRAFT.calc) return;
+  const r = calcRun(PDRAFT.calc), f = v => (+v || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const active = document.activeElement && document.activeElement.closest && document.activeElement.closest("#pc-body") ? null : 1;
+  if (active || !body.children.length || body.children.length !== r.rows.length) {
+    body.innerHTML = r.rows.map((l, i) => `<tr><td><input data-pc="${i}" data-k="item" value="${esc(l.item)}" aria-label="Item"><div class="small muted pc-sc">${(l.scopes || []).map(esc).join(" · ")}</div></td>
+      <td><select data-pc="${i}" data-k="basis" aria-label="Basis">${Object.entries(CALC_BASIS).map(([v, t]) => `<option value="${v}" ${l.basis === v ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+      <td class="num">${l.basis === "seal" || l.basis === "print" ? `<span class="pc-auto" id="pc-sh-${i}"></span>` : `<input data-pc="${i}" data-k="sheets" type="number" min="0" value="${esc(l.sheets)}" style="width:60px" aria-label="Sheets">`}</td>
+      <td class="num" id="pc-q-${i}"></td>
+      <td class="num"><input data-pc="${i}" data-k="rate" type="number" min="0" step="0.01" value="${esc(l.rate)}" style="width:90px" aria-label="Unit cost"></td>
+      <td class="num"><input data-pc="${i}" data-k="min" type="number" min="0" step="0.01" value="${esc(l.min || "")}" style="width:90px" aria-label="Minimum"></td>
+      <td class="num" id="pc-c-${i}"></td><td><button type="button" class="btn sm" data-a="pp-calc-rm" data-i="${i}" aria-label="Remove line">✕</button></td></tr>`).join("");
+  }
+  r.rows.forEach((l, i) => {
+    const sh = document.getElementById("pc-sh-" + i); if (sh) sh.textContent = l.sheetsShown + (l.basis === "print" ? ` (${r.plans} × ${PDRAFT.calc.sets})` : "");
+    const q = document.getElementById("pc-q-" + i); if (q) q.textContent = `${l.qty} ${l.unit}`;
+    const c = document.getElementById("pc-c-" + i); if (c) { c.textContent = f(l.cost); c.title = l.minApplied ? `Minimum applied (computed ${f(l.base)})` : ""; c.classList.toggle("pc-min", l.minApplied); }
+  });
+  document.getElementById("pc-total").textContent = php(r.total);
+  const d = document.getElementById("pc-diff"), tot = +(document.getElementById("pp-total") || {}).value || 0;
+  if (d) { d.textContent = tot && Math.abs(tot - r.total) > 0.5 ? `Total contract cost is ${php(tot)} (${tot > r.total ? "+" : ""}${php(tot - r.total)} vs computed)` : tot ? "Total contract cost matches" : ""; d.className = "small muted"; }
+}
+function readCalc() {
+  const k = PDRAFT && PDRAFT.calc; if (!k || !document.getElementById("pc-area")) return;
+  k.area = +document.getElementById("pc-area").value || 0; k.sets = +document.getElementById("pc-sets").value || 0; k.use_min = document.getElementById("pc-min").checked;
+  document.querySelectorAll("[data-pc]").forEach(e => { const l = k.lines[+e.dataset.pc]; if (!l) return; const key = e.dataset.k; l[key] = key === "item" || key === "basis" ? e.value : (+e.value || 0); });
+}
+
 /* ---------- owner: editor ---------- */
 let PDRAFT = null;
 function nextProposalNo() { const y = new Date().getFullYear(); const n = S.proposals.filter(p => (p.proposal_no || "").startsWith(`DP-${y}-`)).length + 1; return `DP-${y}-${String(n).padStart(3, "0")}`; }
@@ -181,6 +251,7 @@ function drawProposalForm() {
   ${(() => { const opts = S.proposals.filter(x => x.kind === "Construction" && !x.project_id && (!parentOf(x) || parentOf(x).id === p.id));
     return `<label class="f" for="pp-bp">Construction ball park estimate (optional, shown in the same client link)<select id="pp-bp"><option value="">None</option>${opts.map(x => `<option value="${x.id}" ${x.id === p.ballpark_id ? "selected" : ""}>${esc(x.proposal_no)} · ${esc(x.client_name)} · ${esc(x.title)} · ${peso((x.content && x.content.finance && x.content.finance.construction) || 0)}</option>`).join("")}</select>
       <span class="small muted" style="font-weight:400">Make the construction proposal first and keep it as a draft. The client accepts this design proposal and only acknowledges the ball park estimate, so no construction payments are created.</span></label>`; })()}
+  ${calcSection(p)}
   <div class="sec">Scope of work</div>
   <div class="pp-items">${c.items.map((it, i) => `<div class="pp-item"><span class="pp-no">${ROMAN[i] || i + 1}</span><input data-pi="${i}" data-k="item" value="${esc(it.item)}" aria-label="Item" placeholder="Item">
     <textarea data-pi="${i}" data-k="scopes" rows="${Math.max(2, (it.scopes || []).length)}" aria-label="Scope, one per line" placeholder="Scope, one per line">${esc((it.scopes || []).join("\n"))}</textarea><button type="button" class="btn sm" data-a="pp-rmitem" data-i="${i}" aria-label="Remove item">✕</button></div>`).join("")}</div>
@@ -201,11 +272,12 @@ function drawProposalForm() {
       <label class="f wide" for="pp-closing">Closing line<input id="pp-closing" value="${esc(c.closing)}"></label>
     </div></details>
   <div class="row end"><div></div><div class="row"><button class="btn" data-a="close">Cancel</button><button class="btn" data-a="save-prop" data-s="draft">Save draft</button><button class="btn primary" data-a="save-prop" data-s="sent">Save and get client link</button></div></div>`);
-  updatePropCalc();
+  updatePropCalc(); drawCalcRows();
 }
 function readProposalForm() {
   const p = PDRAFT, c = p.content, g = id => (document.getElementById(id) || {}).value;
   if (g("pp-title") === undefined) return;
+  readCalc();
   Object.assign(p, { title: g("pp-title").trim(), location: g("pp-loc").trim(), client_name: g("pp-client").trim(), client_email: g("pp-email").trim(), client_phone: g("pp-phone").trim(),
     proposal_no: g("pp-no").trim(), proposal_date: g("pp-date"), valid_days: +g("pp-valid") || 30, total: +g("pp-total") || 0, ballpark_id: g("pp-bp") || null });
   c.vat_note = g("pp-vat");
@@ -233,6 +305,7 @@ async function saveProposal(status) {
   const body = { proposal_no: p.proposal_no, kind: p.kind || "Design", title: p.title, location: p.location, client_name: p.client_name, client_email: p.client_email, client_phone: p.client_phone,
     proposal_date: p.proposal_date, valid_days: p.valid_days, total: p.total, content: p.content, status: p.status === "draft" || !p.id ? status : p.status };
   if (p.ballpark_id || p.id) body.ballpark_id = p.ballpark_id || null;
+  if (p.calc || (p.id && "calc" in p)) body.calc = p.calc || null;
   if (p.id) return await q(sb.from("proposals").update(body).eq("id", p.id).select().single());
   return await q(sb.from("proposals").insert(body).select().single());
 }
@@ -298,6 +371,11 @@ document.addEventListener("click", async ev => {
     else if (a === "open-prop") { S.viewProposal = id; location.hash = "proposal"; render(); }
     else if (a === "edit-prop") { const x = S.proposals.find(y => y.id === id); x.kind === "Construction" ? constructionForm(x) : proposalForm(x); }
     else if (a === "dup-prop") { const x = S.proposals.find(y => y.id === id); x.kind === "Construction" ? constructionForm(x, true) : proposalForm(x, true); }
+    else if (a === "pp-calc-on") { readProposalForm(); PDRAFT.calc = calcTemplate(); const m = /(\d+(?:\.\d+)?)\s*sqm/i.exec(PDRAFT.title || ""); if (m) PDRAFT.calc.area = +m[1]; drawProposalForm(); }
+    else if (a === "pp-calc-off") { readProposalForm(); PDRAFT.calc = null; drawProposalForm(); }
+    else if (a === "pp-calc-add") { readProposalForm(); PDRAFT.calc.lines.push({ item: "", scopes: [], sheets: 0, basis: "lot", rate: 0, min: 0 }); drawProposalForm(); }
+    else if (a === "pp-calc-rm") { readProposalForm(); PDRAFT.calc.lines.splice(+el.dataset.i, 1); drawProposalForm(); }
+    else if (a === "pp-calc-use") { readProposalForm(); document.getElementById("pp-total").value = calcRun(PDRAFT.calc).total; updatePropCalc(); drawCalcRows(); toast("Total contract cost updated"); }
     else if (a === "pp-additem") { readProposalForm(); PDRAFT.content.items.push({ item: "", scopes: [] }); drawProposalForm(); }
     else if (a === "pp-rmitem") { readProposalForm(); PDRAFT.content.items.splice(+el.dataset.i, 1); drawProposalForm(); }
     else if (a === "pp-addpay") { readProposalForm(); PDRAFT.content.payments.push({ label: ORD(PDRAFT.content.payments.length + 1) + " Payment", pct: 0, milestone: "" }); drawProposalForm(); }
@@ -344,4 +422,5 @@ document.addEventListener("click", async ev => {
     }
   } catch (e) { const m = friendly(e); const msg = document.getElementById("pub-msg"); if (msg) msg.innerHTML = `<div class="amsg bad">${esc(m)}</div>`; else toast(m); el.disabled = false; }
 });
-document.addEventListener("input", e => { if (e.target.closest && e.target.closest(".pp-pays, #pp-total")) updatePropCalc(); });
+document.addEventListener("input", e => { if (e.target.closest && e.target.closest(".pp-pays, #pp-total")) updatePropCalc(); if (e.target.closest && e.target.closest("#pc-body, #pc-area, #pc-sets, #pp-total")) { readCalc(); drawCalcRows(); } });
+document.addEventListener("change", e => { if (e.target.id === "pc-min" || (e.target.dataset && e.target.dataset.pc !== undefined && e.target.dataset.k === "basis")) { readCalc(); const b = document.getElementById("pc-body"); if (b) b.innerHTML = ""; drawCalcRows(); } });
