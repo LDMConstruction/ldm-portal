@@ -57,8 +57,14 @@ const pchip = p => { const s = propStatus(p); return `<span class="chip ${PSTAT[
 function propLink(p) { return location.origin + location.pathname + "?proposal=" + p.token; }
 
 /* ---------- the proposal document (same layout as the Word proposal) ---------- */
+function ballparkOf(p) { if (!p || p.kind === "Construction") return null; if (p.ballpark) return p.ballpark; return p.ballpark_id ? (S.proposals || []).find(x => x.id === p.ballpark_id) || null : null; }
+function parentOf(p) { return p && p.id ? (S.proposals || []).find(x => x.ballpark_id === p.id) || null : null; }
 function proposalDoc(p) {
-  if (p.kind === "Construction") return constructionDoc(p);
+  if (p.kind === "Construction") return constructionDoc(p, !!parentOf(p));
+  const bp = ballparkOf(p);
+  return designDoc(p) + (bp ? `<div class="pd-attach"><b>Attached:</b> Construction cost proposal ${esc(bp.proposal_no)} (ball park figures). For reference only; the construction price is finalized after the design.</div>${constructionDoc({ ...bp, status: p.status, accepted_name: p.accepted_name, responded_at: p.responded_at }, true)}` : "");
+}
+function designDoc(p) {
   const c = { ...designTemplate(), ...(p.content || {}) };
   const accepted = ["accepted", "onboarded"].includes(p.status) && p.accepted_name;
   return `<article class="pdoc">
@@ -94,14 +100,14 @@ function proposalDoc(p) {
 
 /* ---------- owner: tracker ---------- */
 function vProposals() {
-  const all = S.proposals.slice().sort((a, b) => (b.proposal_date || "").localeCompare(a.proposal_date || "") || (b.created_at || "").localeCompare(a.created_at || ""));
+  const all = S.proposals.filter(p => !parentOf(p)).sort((a, b) => (b.proposal_date || "").localeCompare(a.proposal_date || "") || (b.created_at || "").localeCompare(a.created_at || ""));
   const by = s => all.filter(p => propStatus(p) === s);
   const sum = arr => arr.reduce((a, p) => a + (+p.total || 0), 0);
   const responded = all.filter(p => ["accepted", "declined", "onboarded"].includes(p.status));
   const won = all.filter(p => ["accepted", "onboarded"].includes(p.status));
   const thisMonth = all.filter(p => (p.proposal_date || "").startsWith(ym(new Date())));
   const row = p => { const e = propExpiry(p), st = propStatus(p);
-    return `<tr class="click" data-a="open-prop" data-id="${p.id}"><td><b>${esc(p.client_name || "—")}</b><div class="small muted">${esc(p.proposal_no)} · ${esc(p.kind || "Design")} · ${esc(p.title)}</div></td>
+    return `<tr class="click" data-a="open-prop" data-id="${p.id}"><td><b>${esc(p.client_name || "—")}</b><div class="small muted">${esc(p.proposal_no)} · ${esc(p.kind === "Construction" ? "Construction ball park" : "Design")} · ${esc(p.title)}${ballparkOf(p) ? ` · with ball park ${esc(ballparkOf(p).proposal_no)}` : ""}</div></td>
       <td class="small">${esc(p.location)}</td><td class="small">${fmtD(p.proposal_date)}${st === "sent" && e ? `<div class="muted">valid until ${fmtD(ymd(e))}</div>` : ""}</td><td>${pchip(p)}</td><td class="num">${peso(p.total)}</td>
       <td>${p.status === "accepted" ? `<button class="btn sm primary" data-a="onboard-prop" data-id="${p.id}">Onboard</button>` : p.project_id ? `<a href="#" class="small" data-a="goto-project" data-id="${p.project_id}">Open project</a>` : ""}</td></tr>`; };
   const group = (title, list, empty) => `<div class="card scroll"><h2>${title} (${list.length})</h2>${list.length ? `<table><thead><tr><th>Client and project</th><th>Location</th><th>Date</th><th>Status</th><th class="num">Amount</th><th></th></tr></thead><tbody>${list.map(row).join("")}</tbody></table>` : `<div class="empty">${empty}</div>`}</div>`;
@@ -125,7 +131,12 @@ function vProposals() {
 function vProposal() {
   const p = S.proposals.find(x => x.id === S.viewProposal) || S.clientProposals.find(x => x.id === S.viewProposal);
   if (!p) return `<div class="empty">This proposal isn't available. <a href="#${IS("owner") ? "proposals" : "home"}">Go back</a></div>`;
-  const owner = IS("owner"), st = propStatus(p);
+  const owner = IS("owner"), st = propStatus(p), parent = owner ? parentOf(p) : null;
+  if (parent) return `
+  <div class="head no-print"><div><a href="#proposals" class="small">← All proposals</a><h1>${esc(p.proposal_no)} · ${esc(p.client_name)}</h1></div>
+  <div class="row">${!parent.project_id ? `<button class="btn" data-a="edit-prop" data-id="${p.id}">Edit</button>` : ""}<button class="btn" data-a="print">Print or save as PDF</button></div></div>
+  <div class="card no-print"><p style="margin:0">This ball park estimate is attached to design proposal <a href="#" data-a="open-prop" data-id="${parent.id}"><b>${esc(parent.proposal_no)}</b></a> (${pchip(parent)}). The client sees it in that proposal's link and acknowledges it when they accept the design. No construction payments are created from it.</p></div>
+  ${proposalDoc(p)}`;
   const steps = [["Prepared", p.created_at], ["Sent", p.sent_at], [p.status === "declined" ? "Declined" : "Accepted", p.status === "declined" || ["accepted", "onboarded"].includes(p.status) ? p.responded_at : null], ["Onboarded", p.project_id ? 1 : null]];
   return `
   <div class="head no-print"><div><a href="#${owner ? "proposals" : "home"}" class="small">← ${owner ? "All proposals" : "My project"}</a><h1>${esc(p.proposal_no)} · ${esc(p.client_name)}</h1><div class="row" style="margin-top:6px">${owner ? pchip(p) : ""}</div></div>
@@ -152,7 +163,7 @@ let PDRAFT = null;
 function nextProposalNo() { const y = new Date().getFullYear(); const n = S.proposals.filter(p => (p.proposal_no || "").startsWith(`DP-${y}-`)).length + 1; return `DP-${y}-${String(n).padStart(3, "0")}`; }
 function proposalForm(p, dup) {
   PDRAFT = p ? JSON.parse(JSON.stringify(p)) : { proposal_no: nextProposalNo(), kind: "Design", title: "", location: "", client_name: "", client_email: "", client_phone: "", proposal_date: ymd(new Date()), valid_days: 30, total: 0, content: designTemplate(), status: "draft" };
-  if (dup) { delete PDRAFT.id; delete PDRAFT.token; Object.assign(PDRAFT, { proposal_no: nextProposalNo(), status: "draft", proposal_date: ymd(new Date()), project_id: null, accepted_name: "", client_note: "", responded_at: null, sent_at: null }); }
+  if (dup) { delete PDRAFT.id; delete PDRAFT.token; Object.assign(PDRAFT, { proposal_no: nextProposalNo(), status: "draft", proposal_date: ymd(new Date()), project_id: null, ballpark_id: null, accepted_name: "", client_note: "", responded_at: null, sent_at: null }); }
   PDRAFT.content = { ...designTemplate(), ...(PDRAFT.content || {}) };
   drawProposalForm();
 }
@@ -167,6 +178,9 @@ function drawProposalForm() {
     ${inp("pp-email", "Client email (links their portal account later)", p.client_email, "email")}${inp("pp-phone", "Client mobile", p.client_phone)}
     ${inp("pp-no", "Proposal no.", p.proposal_no)}${inp("pp-date", "Date", p.proposal_date, "date")}${inp("pp-valid", "Valid for (days)", p.valid_days, "number", 'min="1"')}
   </div>
+  ${(() => { const opts = S.proposals.filter(x => x.kind === "Construction" && !x.project_id && (!parentOf(x) || parentOf(x).id === p.id));
+    return `<label class="f" for="pp-bp">Construction ball park estimate (optional, shown in the same client link)<select id="pp-bp"><option value="">None</option>${opts.map(x => `<option value="${x.id}" ${x.id === p.ballpark_id ? "selected" : ""}>${esc(x.proposal_no)} · ${esc(x.client_name)} · ${esc(x.title)} · ${peso((x.content && x.content.finance && x.content.finance.construction) || 0)}</option>`).join("")}</select>
+      <span class="small muted" style="font-weight:400">Make the construction proposal first and keep it as a draft. The client accepts this design proposal and only acknowledges the ball park estimate, so no construction payments are created.</span></label>`; })()}
   <div class="sec">Scope of work</div>
   <div class="pp-items">${c.items.map((it, i) => `<div class="pp-item"><span class="pp-no">${ROMAN[i] || i + 1}</span><input data-pi="${i}" data-k="item" value="${esc(it.item)}" aria-label="Item" placeholder="Item">
     <textarea data-pi="${i}" data-k="scopes" rows="${Math.max(2, (it.scopes || []).length)}" aria-label="Scope, one per line" placeholder="Scope, one per line">${esc((it.scopes || []).join("\n"))}</textarea><button type="button" class="btn sm" data-a="pp-rmitem" data-i="${i}" aria-label="Remove item">✕</button></div>`).join("")}</div>
@@ -193,7 +207,7 @@ function readProposalForm() {
   const p = PDRAFT, c = p.content, g = id => (document.getElementById(id) || {}).value;
   if (g("pp-title") === undefined) return;
   Object.assign(p, { title: g("pp-title").trim(), location: g("pp-loc").trim(), client_name: g("pp-client").trim(), client_email: g("pp-email").trim(), client_phone: g("pp-phone").trim(),
-    proposal_no: g("pp-no").trim(), proposal_date: g("pp-date"), valid_days: +g("pp-valid") || 30, total: +g("pp-total") || 0 });
+    proposal_no: g("pp-no").trim(), proposal_date: g("pp-date"), valid_days: +g("pp-valid") || 30, total: +g("pp-total") || 0, ballpark_id: g("pp-bp") || null });
   c.vat_note = g("pp-vat");
   document.querySelectorAll("[data-pi]").forEach(e => { const it = c.items[+e.dataset.pi]; if (!it) return; if (e.dataset.k === "item") it.item = e.value; else it.scopes = e.value.split("\n").map(s => s.trim()).filter(Boolean); });
   document.querySelectorAll("[data-pp]").forEach(e => { const x = c.payments[+e.dataset.pp]; if (!x) return; x[e.dataset.k] = e.dataset.k === "pct" ? (+e.value || 0) : e.value; });
@@ -218,6 +232,7 @@ async function saveProposal(status) {
   if (!p.total) { toast("Enter the total contract cost."); return null; }
   const body = { proposal_no: p.proposal_no, kind: p.kind || "Design", title: p.title, location: p.location, client_name: p.client_name, client_email: p.client_email, client_phone: p.client_phone,
     proposal_date: p.proposal_date, valid_days: p.valid_days, total: p.total, content: p.content, status: p.status === "draft" || !p.id ? status : p.status };
+  if (p.ballpark_id || p.id) body.ballpark_id = p.ballpark_id || null;
   if (p.id) return await q(sb.from("proposals").update(body).eq("id", p.id).select().single());
   return await q(sb.from("proposals").insert(body).select().single());
 }
@@ -225,7 +240,7 @@ async function saveProposal(status) {
 function onboardForm(p) {
   const last = (p.client_name || "").replace(/^(mr|mrs|ms|engr|arch|dr|spouses)\.?\s+/i, "").trim().split(/\s+/).pop() || "";
   openModal(`<h2>Onboard ${esc(p.client_name)}</h2>
-  <p class="small muted" style="margin:0">This creates the project in Onboarded status, Design phase, ${p.kind === "Construction" && p.content && p.content.finance ? `with a construction contract of ${peso(p.content.finance.construction)}, design and services of ${peso(p.content.finance.design)}, and the ${(p.content.milestones || []).length} payments from the cost schedule` : `with a design contract of ${peso(p.total)} and the ${p.content && p.content.payments ? p.content.payments.length : 0} payment milestones from the proposal`}. ${p.client_email ? `When the client creates an account with ${esc(p.client_email)}, they see their project automatically.` : "No client email on the proposal, so link their account in Team & Access after they sign up."}</p>
+  <p class="small muted" style="margin:0">This creates the project in Onboarded status, Design phase, ${p.kind === "Construction" && p.content && p.content.finance ? `with a design and services contract of ${peso(p.content.finance.design)} and its ${(p.content.milestones || []).filter(m => m.stage !== "Construction").length} design and services payments. The construction ball park estimate of ${peso(p.content.finance.construction)} is saved in the project notes only; no construction payments are created. Set the construction contract after the design` : `with a design contract of ${peso(p.total)} and the ${p.content && p.content.payments ? p.content.payments.length : 0} payment milestones from the proposal${ballparkOf(p) ? `. The attached construction ball park estimate of ${peso(((ballparkOf(p).content || {}).finance || {}).construction || 0)} is saved in the project notes only; no construction payments are created` : ""}`}. ${p.client_email ? `When the client creates an account with ${esc(p.client_email)}, they see their project automatically.` : "No client email on the proposal, so link their account in Team & Access after they sign up."}</p>
   <label class="f" for="ob-name">Project name<input id="ob-name" value="${esc(last ? last + " Residence" : p.title)}"></label>
   <div class="row end"><div></div><div class="row"><button class="btn" data-a="close">Cancel</button><button class="btn primary" data-a="onboard-go" data-id="${p.id}">Onboard client</button></div></div>`);
 }
@@ -253,19 +268,20 @@ async function showPublicProposal(token) {
   let p;
   try { p = await q(sb.rpc("proposal_by_token", { t: token })); } catch (e) { p = null; }
   if (!p) { box.innerHTML = `<div class="acard" style="margin:40px auto"><img src="logo.png" alt="LDM Construction"><h2>Proposal not found</h2><p>This link may be incomplete. Please check the link LDM sent you, or contact us at 0945 681 0515.</p></div>`; return; }
-  const st = propStatus(p), done = ["accepted", "onboarded"].includes(p.status);
+  const st = propStatus(p), done = ["accepted", "onboarded"].includes(p.status), bp = ballparkOf(p), designFirst = !!bp || p.kind === "Construction";
   box.innerHTML = `<div class="pub">
     <div class="card no-print pub-card">
-      ${done ? `<h2>Thank you, ${esc(p.accepted_name)}!</h2><p>You accepted this proposal on ${longDate((p.responded_at || "").slice(0, 10))}. LDM will be in touch about the down payment and next steps.</p>
+      ${done ? `<h2>Thank you, ${esc(p.accepted_name)}!</h2><p>You accepted this proposal on ${longDate((p.responded_at || "").slice(0, 10))}. ${designFirst ? "We'll start with the design. LDM will be in touch about the first design payment, and the construction price will be finalized with you after the design." : "LDM will be in touch about the down payment and next steps."}</p>
         <p class="small">Create your client account to follow your project's progress, payments and reports. Use the same email LDM has for you.</p><div class="row"><a class="btn primary" href="${location.pathname}#signup">Create my client account</a><a class="btn" href="${location.pathname}">Sign in</a></div>`
       : p.status === "declined" ? `<h2>Proposal declined</h2><p>You declined this proposal. If you change your mind or would like a revised proposal, contact LDM at 0945 681 0515.</p>`
       : st === "expired" ? `<h2>This proposal has expired</h2><p>It was valid for ${p.valid_days} days from ${longDate(p.proposal_date)}. Please contact LDM at 0945 681 0515 for an updated proposal.</p>`
-      : `<h2>Your ${esc((p.kind || "Design").toLowerCase())} cost proposal</h2><p class="small muted" style="margin:0">Please review the scope, terms and payment schedule below. Valid until ${longDate(ymd(propExpiry(p)))}.</p>
+      : `<h2>${bp ? "Your design cost proposal, with a construction ball park estimate" : p.kind === "Construction" ? "Your construction cost proposal (ball park figures)" : "Your design cost proposal"}</h2><p class="small muted" style="margin:0">Please review the scope, terms and payment schedule below. Valid until ${longDate(ymd(propExpiry(p)))}.</p>
+        ${designFirst ? `<div class="pub-steps"><div><b>1. Design first</b><span>Accepting starts the design. You pay the ${bp ? "design fee" : "design and services fees"} on the schedule shown.</span></div><div><b>2. Construction after design</b><span>The construction cost is a ball park estimate so you know what to expect. It isn't a contract or a payment schedule. The final construction price is agreed after the design is finished.</span></div></div>` : ""}
         <div id="pub-msg"></div>
         <label class="f" for="pub-name">Your full name<input id="pub-name" value="${esc(p.client_name)}" autocomplete="name"></label>
-        <label class="checkrow"><input type="checkbox" id="pub-agree"> I have read and agree to the scope of work, terms and conditions, and payment schedule.</label>
+        <label class="checkrow"><input type="checkbox" id="pub-agree"> ${designFirst ? `I accept the ${bp ? "Design Cost Proposal" : "design and services cost"}, its terms and payment schedule, so the design can start. I understand the construction cost is a ball park estimate only, and the construction contract price will be finalized after the design.` : "I have read and agree to the scope of work, terms and conditions, and payment schedule."}</label>
         <label class="f" for="pub-note">Message to LDM (optional)<textarea id="pub-note" rows="2"></textarea></label>
-        <div class="row"><button class="btn primary" data-a="pub-accept">Accept proposal</button><button class="btn" data-a="pub-decline">Decline</button><button class="btn" data-a="print">Print or save as PDF</button></div>`}
+        <div class="row"><button class="btn primary" data-a="pub-accept">${designFirst ? "Accept and start the design" : "Accept proposal"}</button><button class="btn" data-a="pub-decline">Decline</button><button class="btn" data-a="print">Print or save as PDF</button></div>`}
     </div>
     ${proposalDoc(p)}</div>`;
   box.dataset.token = token;

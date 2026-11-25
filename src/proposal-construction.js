@@ -126,7 +126,7 @@ function constructionMilestones(c) {
 }
 
 /* ---------- the document ---------- */
-function constructionDoc(p) {
+function constructionDoc(p, attached) {
   const c = { ...constructionTemplate(), ...(p.content || {}) }, t = buildTimeline(c);
   const ul = s => `<h3 class="cd-h">${s}</h3>`;
   const costTable = (rows, total, label, withRate) => `<table class="pd-scope cd-cost"><thead><tr><th>NO.</th><th>ITEM</th><th>SCOPE</th><th>QTY</th><th>UNIT</th>${withRate ? "<th>UNIT COST</th>" : ""}<th>COST</th></tr></thead><tbody>
@@ -140,6 +140,7 @@ function constructionDoc(p) {
         <div><b>Location:</b> ${esc(p.location)}</div><div><b>Client:</b> <b>${esc(p.client_name)}</b></div></div>
       <div class="pd-bar">${esc(c.title_bar)}</div>
       <p class="pd-intro">${esc(c.intro)}</p>
+      <p class="cd-ballpark"><b>Ball park estimate only.</b> The construction figures and schedule in this proposal are for planning, so you know what to expect during construction. They are not a payment schedule. The final construction contract price and billing are agreed after the design is completed, and billing follows the actual progress on site.</p>
       ${ul("ESTIMATED CONSTRUCTION COST")}${costTable(c.build || [], t.consTotal, "Estimated Total Contract Cost:", true)}
       ${ul("ESTIMATED SERVICES COST")}${costTable(c.services || [], t.servicesTotal, "Estimated Services Cost:", false)}
       ${c.services_note ? `<p class="cd-note">${esc(c.services_note)}</p>` : ""}
@@ -148,10 +149,10 @@ function constructionDoc(p) {
       <table class="cd-sum"><tbody><tr><td>TOTAL CONSTRUCTION COST:</td><td>${php(t.consTotal)}</td></tr><tr><td>TOTAL SERVICES COST:</td><td>${php(t.servicesTotal)}</td></tr>
         <tr class="g"><td>GRAND TOTAL (Construction + Services):</td><td>${php(t.consTotal + t.servicesTotal)}</td></tr></tbody></table>
       ${ul("COST SCHEDULE")}
-      ${ul("A. DESIGN PHASE")}<p>Design Cost${t.asbuilt ? " (excluding As-Builts)" : ""}: <b>${php(t.design)}</b></p>
+      ${ul("A. DESIGN PHASE")}${attached && !t.design ? `<p>Design: see the Design Cost Proposal for the design fee and its payment schedule.</p>` : `<p>Design Cost${t.asbuilt ? " (excluding As-Builts)" : ""}: <b>${php(t.design)}</b></p>
       <table class="cd-t"><thead><tr><th>DATE/MILESTONE</th><th>ACTIVITY</th><th>PAYMENT</th><th>AMOUNT</th></tr></thead><tbody>
         ${t.designRows.map(r => `<tr><td>${monthName(r.m)}</td><td>${esc(r.act)}</td><td>${r.pay}</td><td class="r">${php(r.amt)}</td></tr>`).join("")}
-        <tr><td></td><td></td><td>Design Total:</td><td class="r">${php(t.design)}</td></tr></tbody></table>
+        <tr><td></td><td></td><td>Design Total:</td><td class="r">${php(t.design)}</td></tr></tbody></table>`}
       ${ul("B. PERMIT PHASE")}
       <table class="cd-t"><thead><tr><th>DATE</th><th>ACTIVITY</th></tr></thead><tbody>${t.permitRows.map(r => `<tr><td>${monthName(r.m)}</td><td>${esc(r.act)}</td></tr>`).join("")}</tbody></table>
       ${ul("C. CONSTRUCTION PHASE")}
@@ -168,7 +169,7 @@ function constructionDoc(p) {
         <tr class="pd-total"><td></td><td>Post Construction Total:</td><td class="r">${php(t.postRows.reduce((a, r) => a + (r.amt || 0), 0))}</td></tr></tbody></table>
       <p class="pd-closing">${esc(c.closing)}</p>
       <div class="pd-sign"><div><span class="small">Prepared by:</span><span class="sline"></span><b>${esc(c.signatory)}</b></div>
-        <div>${accepted ? `<span class="accepted">Accepted online by ${esc(p.accepted_name)}</span>` : ""}<span class="sline"></span><b>Client/Owner</b><i>Date: ${accepted && p.responded_at ? longDate(p.responded_at.slice(0, 10)) : "_____________"}</i></div></div>
+        <div>${accepted ? `<span class="accepted">${attached ? "Acknowledged" : "Accepted"} online by ${esc(p.accepted_name)}</span>` : ""}<span class="sline"></span><b>Client/Owner${attached ? " (acknowledged)" : ""}</b><i>Date: ${accepted && p.responded_at ? longDate(p.responded_at.slice(0, 10)) : "_____________"}</i></div></div>
     </div>
     <footer class="pd-foot"><div><b>Contact us :</b><span>☎ 0945 681 0515</span><span>ⓕ https://www.facebook.com/ldm.designbuild</span><span>✉ ldmengineeringdesign@gmail.com</span></div>
       <div class="r"><b>LDM Construction OPC</b><span>2F Mandaue Foam Bldg, Shaw Boulevard</span><span>Addition Hills, Mandaluyong City</span></div></footer>
