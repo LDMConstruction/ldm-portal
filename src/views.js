@@ -1,10 +1,17 @@
 /* LDM Portal: shared project screens (ported from the LDM Project Hub). */
 
-const PHASES = ["Design","Permitting","Mobilization","Demolition","Structural","Roofing & Masonry","MEPF Roughing","Finishing","Punchlist","Turnover"];
-const PHASE_COLORS = ["#a7e6e3","#74d7d3","#3fc9c4","#0ebcb6","#0b9a95","#087f7b","#06625f","#575757","#2b2b2b","#000000"];
+const PHASES = ["Design","Permitting","Mobilization","Demolition","Structural","Roofing & Masonry","MEPF Roughing","Finishing","Punchlist","Occupancy Permit","Turnover"];
+const PHASE_COLORS = ["#a7e6e3","#74d7d3","#3fc9c4","#0ebcb6","#0b9a95","#087f7b","#06625f","#575757","#3d3d3d","#222222","#000000"];
+/* The client success journey: four stages, each made of the detailed steps the team updates. */
+const JOURNEY = [
+  { name: "Design Phase", desc: "Floor plans, 3D perspectives and complete working drawings", phases: ["Design"] },
+  { name: "Permitting Phase", desc: "Building permit application and Notice to Construct", phases: ["Permitting"] },
+  { name: "Construction Phase", desc: "From mobilization and structural works to finishing and punchlist", phases: ["Mobilization", "Demolition", "Structural", "Roofing & Masonry", "MEPF Roughing", "Finishing", "Punchlist"] },
+  { name: "Project Close Out", desc: "Occupancy permit, final inspection and turnover", phases: ["Occupancy Permit", "Turnover"] }];
+const stageOfPhase = ph => (JOURNEY.find(s => s.phases.includes(ph)) || {}).name || "";
 const STATUSES = ["Proposal","Onboarded","Ongoing","On Hold","Completed","Terminated","Unconfirmed"];
 const ACTIVE = new Set(["Onboarded","Ongoing"]);
-const RELEASE_PHASES = new Set(["Finishing","Punchlist","Turnover"]);
+const RELEASE_PHASES = new Set(["Finishing","Punchlist","Occupancy Permit","Turnover"]);
 const CATS = ["Mobilization","Temporary Facilities","Materials","Labor","Subcontract","Equipment","Permits & Fees","Overhead","Misc"];
 const DESIGN_CATS = ["Design Manpower","Consultants","Survey & Soil Test","Plans & Printing","Permits & Fees","Transportation","Misc"];
 const STAGES = ["Design","Construction"];
@@ -52,6 +59,18 @@ function derive(p) {
   const progress = a.length ? Math.round(a.reduce((t, ph) => t + phasePct(p, ph), 0) / a.length) : 0;
   const phase = a.find(ph => phasePct(p, ph) < 100) || a[a.length - 1] || "";
   return { progress, phase };
+}
+function phaseVal(p, ph) { const d = derive(p); return p.phaseProgress ? phasePct(p, ph) : (PHASES.indexOf(ph) < PHASES.indexOf(d.phase) ? 100 : 0); }
+function journey(p) {
+  const ap = applicable(p), d = derive(p);
+  return JOURNEY.map(s => { const ph = s.phases.filter(x => ap.includes(x)); const pct = ph.length ? Math.round(ph.reduce((a, x) => a + phaseVal(p, x), 0) / ph.length) : 0;
+    return { ...s, ph, pct, cur: ph.includes(d.phase) && pct < 100 }; }).filter(s => s.ph.length);
+}
+function currentStage(p) { const j = journey(p); return j.find(s => s.cur) || j.find(s => s.pct < 100) || j[j.length - 1] || { name: "", ph: [], pct: 0 }; }
+function journeyTracker(p) {
+  const j = journey(p), cur = currentStage(p);
+  return `<ol class="jtrack">${j.map((s, i) => { const st = s.pct >= 100 ? "done" : s.name === cur.name ? "cur" : "next";
+    return `<li class="${st}"><span class="jdot">${st === "done" ? "✓" : i + 1}</span><b>${esc(s.name)}</b><span class="small">${st === "done" ? "Completed" : st === "cur" ? `In progress · ${s.pct}%` : "Upcoming"}</span></li>`; }).join("")}</ol>`;
 }
 function fin(p) {
   const contract = +p.contract || 0, est = +p.estCost || 0, actual = stageCost(p.id, "Construction"), designActual = stageCost(p.id, "Design"), collected = colOf(p.id) || +p.collected || 0, collectedD = colOf(p.id, "Design"), collectedC = colOf(p.id, "Construction");
@@ -166,17 +185,17 @@ function progressPanel() {
         ${ROLE !== "owner" ? "" : `<dl class="money"><dt>Design contract</dt><dd>${f.designC ? peso(f.designC) : "–"}</dd><dt>Design cost${f.designBudget ? "" : " (actual)"}</dt><dd>${f.designBasis ? peso(f.designBasis) : "–"}</dd><dt>Construction contract</dt><dd>${f.constrC ? peso(f.constrC) : "–"}</dd><dt>Direct cost</dt><dd>${f.est ? peso(f.est) : "–"}</dd><dt><b>Total contract</b></dt><dd><b>${f.contract ? peso(f.contract) : "–"}</b></dd><dt>Protected profit</dt><dd class="${f.ok ? (f.profit < 0 ? "neg" : "pos") : ""}">${f.ok ? peso(f.profit) : `<span class="small muted">set direct cost</span>`}</dd><dt>Running budget</dt><dd class="${f.running < 0 ? "neg" : ""}">${f.est ? peso(f.running) : "–"}</dd><dt>Budget at hand</dt><dd class="${f.collected - f.actual - f.designActual < 0 ? "neg" : ""}">${f.collected || f.actual || f.designActual ? peso(f.collected - f.actual - f.designActual) : "–"}</dd><dt><b>Actual profit</b></dt><dd class="${p.status === "Completed" && f.contract ? (f.actualProfit < 0 ? "neg" : "pos") : "muted"}">${p.status === "Completed" && f.contract ? `<b>${peso(f.actualProfit)}</b>` : `<span class="small">at completion</span>`}</dd></dl>`}
         <div class="meta">${mob ? `<span><b style="color:var(--ink)">Mobilizes</b> ${fmtD(p.mobilizationDate)}</span>` : p.startDate ? `<span>Started ${fmtD(p.startDate)}</span>` : ""}<span class="${isLate(p) ? "neg" : ""}">Target ${p.endDate ? fmtD(p.endDate) : "not set"}</span></div>
       </div>
-      <div class="phs">${applicable(p).map(ph => { const v = p.phaseProgress ? phasePct(p, ph) : (PHASES.indexOf(ph) < PHASES.indexOf(d.phase) ? 100 : 0); const key = p.id + "|" + ph; const idk = "ph-" + p.id + "-" + PHASES.indexOf(ph);
-        return `<label class="phr ${v >= 100 ? "done" : ph === d.phase ? "cur" : ""}" for="${idk}"><span>${esc(ph)}</span><input type="range" min="0" max="100" step="5" value="${v}" id="${idk}" data-php="${esc(key)}" style="--v:${v}%" aria-label="${esc(ph)} progress for ${esc(p.name)}"><b id="${idk}-v">${v}%</b></label>`; }).join("")}</div>
+      <div class="phstages">${journeyTracker(p)}${journey(p).map(s => `<div class="phgrp"><div class="phg"><b>${esc(s.name)}</b><span>${s.pct}%</span></div><div class="phs">${s.ph.map(ph => { const v = phaseVal(p, ph); const key = p.id + "|" + ph; const idk = "ph-" + p.id + "-" + PHASES.indexOf(ph);
+        return `<label class="phr ${v >= 100 ? "done" : ph === d.phase ? "cur" : ""}" for="${idk}"><span>${esc(ph)}</span><input type="range" min="0" max="100" step="5" value="${v}" id="${idk}" data-php="${esc(key)}" style="--v:${v}%" aria-label="${esc(ph)} progress for ${esc(p.name)}"><b id="${idk}-v">${v}%</b></label>`; }).join("")}</div></div>`).join("")}</div>
     </div>`;
   }).join("");
 }
 function summaryTable() {
   const list = mapProjects();
   if (!list.length) return `<div class="empty">No active projects yet.</div>`;
-  return `<table><thead><tr><th>Project</th><th>Status</th><th>Current phase</th><th style="min-width:160px">Progress</th><th>Next date</th><th class="num">Contract</th></tr></thead><tbody>
+  return `<table><thead><tr><th>Project</th><th>Status</th><th>Stage</th><th style="min-width:160px">Progress</th><th>Next date</th><th class="num">Contract</th></tr></thead><tbody>
   ${list.map(p => { const d = derive(p), f = fin(p), mob = p.mobilizationDate && parseD(p.mobilizationDate) >= today();
-    return `<tr class="click" data-a="edit" data-id="${p.id}"><td><b>${esc(p.name)}</b><div class="small muted">${esc(p.scope || p.location || "")}</div></td><td>${chip(p.status)}</td><td>${esc(d.phase || "—")}</td>
+    return `<tr class="click" data-a="edit" data-id="${p.id}"><td><b>${esc(p.name)}</b><div class="small muted">${esc(p.scope || p.location || "")}</div></td><td>${chip(p.status)}</td><td>${esc(currentStage(p).name || "—")}<div class="small muted">${esc(d.phase || "")}</div></td>
     <td><div class="pctrow"><div class="bar"><i style="width:${d.progress}%"></i></div><span class="small" style="font-family:var(--mono);min-width:36px;text-align:right">${d.progress}%</span></div></td>
     <td class="small">${mob ? `Mobilization<br><b>${fmtD(p.mobilizationDate)}</b>` : `Target<br><b class="${isLate(p) ? "neg" : ""}">${p.endDate ? fmtD(p.endDate) : "not set"}</b>`}</td>
     <td class="num">${f.contract ? peso(f.contract) : "–"}</td></tr>`; }).join("")}
@@ -498,8 +517,8 @@ function projectForm(p) {
     ${p.id ? `<div class="f" style="font-size:13px"><span class="muted" style="font-weight:600">Collected so far</span><b style="font:700 18px var(--display)">${peso(fin(p).collected)}</b><button type="button" class="btn sm" data-a="col-for" data-id="${p.id}">Record a collection</button></div>` : ""}
     <div class="calc" id="f-calc"></div>
     <div class="sec">Progress per phase</div>
-    <div class="phform">${(() => { const d0 = derive(p); return PHASES.map((ph, i) => { const na = (p.phasesNA || []).includes(ph); const v = p.phaseProgress ? phasePct(p, ph) : (i < PHASES.indexOf(d0.phase) ? 100 : 0);
-      return `<div class="r ${na ? "na" : ""}"><span>${esc(ph)}</span><input type="range" min="0" max="100" step="5" value="${v}" id="fp-${i}" data-fp="${i}" aria-label="${esc(ph)} progress"><input type="number" min="0" max="100" value="${v}" id="fn-${i}" data-fn="${i}" aria-label="${esc(ph)} percent"><label class="small"><input type="checkbox" id="fa-${i}" data-fa="${i}" ${na ? "" : "checked"}> Applies</label></div>`; }).join(""); })()}</div>
+    <div class="phform">${(() => { const d0 = derive(p); return PHASES.map((ph, i) => { const na = (p.phasesNA || []).includes(ph); const st = JOURNEY.find(s => s.phases[0] === ph); const v = p.phaseProgress ? phasePct(p, ph) : (i < PHASES.indexOf(d0.phase) ? 100 : 0);
+      return `${st ? `<div class="phfh">${esc(st.name)}</div>` : ""}<div class="r ${na ? "na" : ""}"><span>${esc(ph)}</span><input type="range" min="0" max="100" step="5" value="${v}" id="fp-${i}" data-fp="${i}" aria-label="${esc(ph)} progress"><input type="number" min="0" max="100" value="${v}" id="fn-${i}" data-fn="${i}" aria-label="${esc(ph)} percent"><label class="small"><input type="checkbox" id="fa-${i}" data-fa="${i}" ${na ? "" : "checked"}> Applies</label></div>`; }).join(""); })()}</div>
     <label class="f wide" for="f-notes">Notes<textarea id="f-notes" name="notes" rows="3">${esc(p.notes)}</textarea></label>
   </form>
   ${p.id ? `<p class="small muted">Actual cost logged: design ${peso(stageCost(p.id, "Design"))}, construction ${peso(stageCost(p.id, "Construction"))}, across ${S.costs.filter(c => c.projectId === p.id).length} entries.</p>` : ""}

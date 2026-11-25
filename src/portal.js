@@ -263,7 +263,7 @@ function vReport() {
       <div><span>Project</span><b>${esc(p.name || "")}</b></div><div><span>Client</span><b>${esc(p.client || "—")}</b></div>
       <div><span>Location</span><b>${esc(p.location || "—")}</b></div><div><span>Scope</span><b>${esc(p.scope || "—")}</b></div>
     </div>
-    <div class="rd-prog"><div><span>Overall progress</span><b>${r.progress_snapshot != null ? r.progress_snapshot : derive(p).progress}%</b></div><div class="dbar"><i style="width:${r.progress_snapshot != null ? r.progress_snapshot : derive(p).progress}%"></i></div><span class="small">Current phase: <b>${esc(r.phase_snapshot || derive(p).phase || "—")}</b></span></div>
+    <div class="rd-prog"><div><span>Overall progress</span><b>${r.progress_snapshot != null ? r.progress_snapshot : derive(p).progress}%</b></div><div class="dbar"><i style="width:${r.progress_snapshot != null ? r.progress_snapshot : derive(p).progress}%"></i></div><span class="small">Stage: <b>${esc(stageOfPhase(r.phase_snapshot || derive(p).phase) || "—")}</b>${(r.phase_snapshot || derive(p).phase) ? ` · ${esc(r.phase_snapshot || derive(p).phase)}` : ""}</span></div>
     <div class="rd-two">${sec("Manpower", r.manpower)}${sec("Weather", r.weather)}</div>
     ${sec("Work accomplished this week", r.activities)}${sec("Plan for next week", r.next_week)}${sec("Issues and concerns", r.issues)}
     ${photos === undefined ? `<p class="muted small">Loading photos…</p>` : photos.length ? `<section><h3>Site photos</h3><div class="rd-photos">${photos.map(ph => `<figure>${ph.url ? `<img src="${esc(ph.url)}" alt="${esc(ph.caption || "Site photo")}" loading="lazy">` : ""}${ph.caption ? `<figcaption>${esc(ph.caption)}</figcaption>` : ""}</figure>`).join("")}</div></section>` : ""}
@@ -372,9 +372,13 @@ function vHome() {
       <div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="font-size:22px">${esc(p.name)}</h2><span class="small muted">${esc(p.scope)}${p.scope && p.location ? " · " : ""}${esc(p.location)}</span></div>${chip(p.status)}</div>
       <div class="two">
         <div style="display:flex;flex-direction:column;gap:12px">
-          <div class="dbig"><b>${d.progress}%</b><span class="small">complete · now in <b>${esc(d.phase || "—")}</b></span></div>
+          ${(() => { const cs = currentStage(p); return `
+          <div class="dbig"><b>${d.progress}%</b><span class="small">overall · now in <b>${esc(cs.name || "—")}</b></span></div>
           <div class="dbar"><i style="width:${d.progress}%"></i></div>
-          <div class="phs">${ap.map(ph => { const v = p.phaseProgress ? phasePct(p, ph) : (PHASES.indexOf(ph) < PHASES.indexOf(d.phase) ? 100 : 0); return `<div class="phr ${v >= 100 ? "done" : ph === d.phase ? "cur" : ""}"><span>${esc(ph)}</span><div class="bar" style="height:8px"><i style="width:${v}%;background:${v >= 100 ? "var(--ink)" : "var(--brand)"}"></i></div><b>${v}%</b></div>`; }).join("")}</div>
+          <h3 class="sec" style="border:none;padding:0">Your project journey</h3>
+          ${journeyTracker(p)}
+          <div class="jnow"><div class="row" style="justify-content:space-between"><b>${esc(cs.name)}</b><span class="small">${cs.pct}% done</span></div><span class="small muted">${esc(cs.desc || "")}</span>
+            ${cs.ph.length > 1 ? `<div class="phs">${cs.ph.map(ph => { const v = phaseVal(p, ph); return `<div class="phr ${v >= 100 ? "done" : ph === d.phase ? "cur" : ""}"><span>${esc(ph)}</span><div class="bar" style="height:8px"><i style="width:${v}%;background:${v >= 100 ? "var(--ink)" : "var(--brand)"}"></i></div><b>${v}%</b></div>`; }).join("")}</div>` : ""}</div>`; })()}
           <div class="dmeta">${mob ? `<span>Site mobilization <b>${fmtD(p.mobilizationDate)}</b></span>` : p.startDate ? `<span>Started <b>${fmtD(p.startDate)}</b></span>` : ""}<span>Target completion <b>${p.endDate ? fmtD(p.endDate) : "to be confirmed"}</b></span></div>
           ${latest ? `<div class="answer"><b style="font-size:15px">Latest report:</b> ${weekRange(latest)} <a href="#" data-a="open-report" data-id="${latest.id}">Read report</a></div>` : ""}
         </div>

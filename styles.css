@@ -400,3 +400,22 @@ input[type=month] { background: var(--panel); border: 1px solid var(--line); bor
 .due .r { text-align: right; align-items: flex-end; white-space: nowrap; }
 .due .r b { font: 700 18px var(--display); }
 .due.review { border-left-color: var(--warn); }
+/* ---------- client success journey ---------- */
+.jtrack { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0; counter-reset: j; }
+.jtrack li { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 0 6px; font-size: 13px; }
+.jtrack li::before { content: ""; position: absolute; top: 15px; left: -50%; width: 100%; height: 3px; background: var(--line); z-index: 0; }
+.jtrack li:first-child::before { display: none; }
+.jtrack li.done::before, .jtrack li.cur::before { background: var(--brand); }
+.jdot { position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font: 700 14px var(--display); background: var(--panel); border: 3px solid var(--line); color: var(--muted); }
+.jtrack li.done .jdot { background: var(--ink); border-color: var(--ink); color: var(--panel); }
+.jtrack li.cur .jdot { background: var(--brand); border-color: var(--brand); color: #000; box-shadow: 0 0 0 4px var(--accent-soft); }
+.jtrack li.next b { color: var(--muted); font-weight: 600; }
+.jtrack .small { color: var(--muted); }
+.jtrack li.cur .small { color: var(--accent); font-weight: 600; }
+.jnow { border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.phstages { display: flex; flex-direction: column; gap: 12px; }
+.phgrp { display: flex; flex-direction: column; gap: 6px; }
+.phg { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 3px; font-size: 13px; }
+.phg span { font-family: var(--mono); color: var(--muted); }
+.phfh { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-top: 8px; }
+@media (max-width: 600px) { .jtrack { grid-template-columns: repeat(2, 1fr); row-gap: 14px; } .jtrack li::before { display: none; } }
