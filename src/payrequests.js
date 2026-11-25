@@ -5,10 +5,14 @@
    ================================================================ */
 const MSTAT = { scheduled: ["Scheduled", "OnHold"], requested: ["Requested", "Proposal"], paid: ["Paid", "Ongoing"] };
 function mchip(m) { const over = m.status === "requested" && m.due_date && parseD(m.due_date) < today(); return over ? `<span class="chip Unconfirmed">Overdue</span>` : `<span class="chip ${MSTAT[m.status || "scheduled"][1]}">${MSTAT[m.status || "scheduled"][0]}</span>`; }
+/* Progress billings that are sent or accepted and not yet fully paid (payments recorded with reference "PB n"). */
+function billPaid(b) { return S.collections.filter(c => c.projectId === b.project_id && new RegExp(`\\bPB ${b.billing_no}\\b`).test(c.reference || "")).reduce((a, c) => a + c.amount, 0); }
+function openBillings(pid) { return (S.billings || []).filter(b => (!pid || b.project_id === pid) && ["sent", "accepted"].includes(b.status) && billPaid(b) < (+b.amount_due || 0) - 0.5); }
 const msSort = (a, b) => (a.stage === b.stage ? 0 : a.stage === "Design" ? -1 : 1) || a.sort - b.sort;
 
 function vRequests() {
   const req = S.milestones.filter(m => m.status === "requested");
+  const bills = openBillings().filter(b => b.status === "accepted"), billsDue = bills.reduce((a, b) => a + (+b.amount_due - billPaid(b)), 0);
   const overdue = req.filter(m => m.due_date && parseD(m.due_date) < today());
   const mNow = ym(new Date());
   const paidMonth = S.milestones.filter(m => m.status === "paid" && (m.paid_at || "").startsWith(mNow));
@@ -18,13 +22,15 @@ function vRequests() {
   <div class="head"><div><h1>Payment requests</h1><p class="sub">Clients only see a payment once you request it. Request the next payment when its milestone is reached, then record it when the client pays.</p></div>
   <button class="btn primary" data-a="mr-new">New payment request</button></div>
   <div class="grid-tiles">
-    <div class="tile hi"><span class="k">Requested, unpaid</span><span class="v">${peso(req.reduce((a, m) => a + +m.amount, 0))}</span><span class="h">${req.length} request${req.length === 1 ? "" : "s"} with clients</span></div>
+    <div class="tile hi"><span class="k">Requested, unpaid</span><span class="v">${peso(req.reduce((a, m) => a + +m.amount, 0) + billsDue)}</span><span class="h">${req.length} request${req.length === 1 ? "" : "s"}${bills.length ? ` and ${bills.length} accepted billing${bills.length === 1 ? "" : "s"}` : ""} with clients</span></div>
     <div class="tile"><span class="k">Overdue</span><span class="v ${overdue.length ? "neg" : ""}">${overdue.length}</span><span class="h">${overdue.length ? peso(overdue.reduce((a, m) => a + +m.amount, 0)) + " past due date" : "nothing past due"}</span></div>
     <div class="tile"><span class="k">Paid this month</span><span class="v">${peso(paidMonth.reduce((a, m) => a + +m.amount, 0))}</span><span class="h">${paidMonth.length} request${paidMonth.length === 1 ? "" : "s"} settled</span></div>
   </div>
-  ${req.length ? `<div class="card scroll"><h2>Waiting for payment (${req.length})</h2><table><thead><tr><th>Project</th><th>Payment</th><th>Due</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead><tbody>
+  ${req.length || bills.length ? `<div class="card scroll"><h2>Waiting for payment (${req.length + bills.length})</h2><table><thead><tr><th>Project</th><th>Payment</th><th>Due</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead><tbody>
     ${req.sort((a, b) => (a.due_date || "9").localeCompare(b.due_date || "9")).map(m => `<tr><td><b>${esc(projName(m.project_id))}</b></td><td class="small">${esc(m.label)}<div class="muted">${esc(m.milestone)}</div></td><td class="small">${m.due_date ? fmtD(m.due_date) : "—"}</td><td class="num">${peso(m.amount)}</td><td>${mchip(m)}</td>
-      <td><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm primary" data-a="mr-pay" data-id="${m.id}">Record payment</button><button class="btn sm" data-a="mr-edit" data-id="${m.id}">Edit</button></div></td></tr>`).join("")}</tbody></table></div>` : ""}
+      <td><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm primary" data-a="mr-pay" data-id="${m.id}">Record payment</button><button class="btn sm" data-a="mr-edit" data-id="${m.id}">Edit</button></div></td></tr>`).join("")}
+    ${bills.map(b => `<tr><td><b>${esc(projName(b.project_id))}</b></td><td class="small">Progress Billing No. ${b.billing_no}<div class="muted">Accepted ${fmtD((b.responded_at || "").slice(0, 10))}${billPaid(b) ? ` · ${peso(billPaid(b))} received` : ""}</div></td><td class="small">—</td><td class="num">${peso(+b.amount_due - billPaid(b))}</td><td><span class="chip Ongoing">Accepted</span></td>
+      <td><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm primary" data-a="pay-bill" data-id="${b.id}">Record payment</button><button class="btn sm" data-a="open-bill" data-id="${b.id}">Open</button></div></td></tr>`).join("")}</tbody></table></div>` : ""}
   ${projs.map(p => { const ms = S.milestones.filter(m => m.project_id === p.id).sort(msSort), nx = nextUp(p);
     const paid = ms.filter(m => m.status === "paid").reduce((a, m) => a + +m.amount, 0), total = ms.reduce((a, m) => a + +m.amount, 0);
     return `<div class="card scroll"><div class="row" style="justify-content:space-between"><div><h2>${esc(p.name)}</h2><span class="small muted">${esc(p.client || "")}${total ? ` · ${peso(paid)} of ${peso(total)} scheduled payments received` : ""}</span></div>
@@ -61,11 +67,16 @@ function requestForm(m, pid) {
 function clientDueCard(p) {
   const due = S.milestones.filter(m => m.project_id === p.id && m.status === "requested").sort((a, b) => (a.due_date || "9").localeCompare(b.due_date || "9"));
   const props = S.clientProposals.filter(x => x.project_id === p.id);
+  const bills = openBillings(p.id);
   let html = `<h3 class="sec" style="border:none;padding:0">Payment due</h3>`;
-  html += due.length ? `<div class="duelist">${due.map(m => { const over = m.due_date && parseD(m.due_date) < today();
+  const billHtml = bills.map(b => { const left = +b.amount_due - billPaid(b), review = b.status === "sent";
+    return `<div class="due ${review ? "review" : ""}"><div><b>Progress Billing No. ${b.billing_no}</b><span class="small muted">${review ? "Waiting for your review. Please check and accept it." : `Accepted ${fmtD((b.responded_at || "").slice(0, 10))}`}</span>
+      <a href="#" class="small" data-a="open-bill" data-id="${b.id}">${review ? "Review billing" : "View billing"}</a></div><div class="r"><b>${peso(left)}</b><span class="small muted">${review ? "after you accept" : "due now"}</span></div></div>`; }).join("");
+  const dueTotal = due.reduce((a, m) => a + +m.amount, 0) + bills.filter(b => b.status === "accepted").reduce((a, b) => a + +b.amount_due - billPaid(b), 0);
+  html += due.length || bills.length ? `<div class="duelist">${billHtml}` + (due.length ? due.map(m => { const over = m.due_date && parseD(m.due_date) < today();
       return `<div class="due ${over ? "over" : ""}"><div><b>${esc(m.label)}</b><span class="small muted">${esc(m.milestone)}</span>${m.request_note ? `<span class="small">${esc(m.request_note)}</span>` : ""}</div>
-        <div class="r"><b>${peso(m.amount)}</b><span class="small ${over ? "neg" : "muted"}">${m.due_date ? (over ? "Overdue since " : "Due ") + fmtD(m.due_date) : ""}</span></div></div>`; }).join("")}
-      <p class="small muted" style="margin:0">Total due ${peso(due.reduce((a, m) => a + +m.amount, 0))}. Please contact LDM for payment details if you need them.</p></div>`
+        <div class="r"><b>${peso(m.amount)}</b><span class="small ${over ? "neg" : "muted"}">${m.due_date ? (over ? "Overdue since " : "Due ") + fmtD(m.due_date) : ""}</span></div></div>`; }).join("") : "") +
+      `<p class="small muted" style="margin:0">Total due now ${peso(dueTotal)}. Please contact LDM for payment details if you need them.</p></div>`
     : `<div class="empty">No payment due right now.</div>`;
   return html + props.map(x => `<p class="small" style="margin:0">Your ${esc((x.kind || "design").toLowerCase())} proposal ${esc(x.proposal_no)}, accepted ${fmtD((x.responded_at || "").slice(0, 10))}. <a href="#" data-a="open-prop" data-id="${x.id}">View proposal</a></p>`).join("");
 }

@@ -376,7 +376,6 @@ function vHome() {
           <div class="dbar"><i style="width:${d.progress}%"></i></div>
           <div class="phs">${ap.map(ph => { const v = p.phaseProgress ? phasePct(p, ph) : (PHASES.indexOf(ph) < PHASES.indexOf(d.phase) ? 100 : 0); return `<div class="phr ${v >= 100 ? "done" : ph === d.phase ? "cur" : ""}"><span>${esc(ph)}</span><div class="bar" style="height:8px"><i style="width:${v}%;background:${v >= 100 ? "var(--ink)" : "var(--brand)"}"></i></div><b>${v}%</b></div>`; }).join("")}</div>
           <div class="dmeta">${mob ? `<span>Site mobilization <b>${fmtD(p.mobilizationDate)}</b></span>` : p.startDate ? `<span>Started <b>${fmtD(p.startDate)}</b></span>` : ""}<span>Target completion <b>${p.endDate ? fmtD(p.endDate) : "to be confirmed"}</b></span></div>
-          ${S.billings.filter(b => b.project_id === p.id && b.status === "sent").map(b => `<div class="answer" style="border-left-color:var(--warn);background:var(--warn-soft)"><b style="font-size:15px">Progress Billing No. ${b.billing_no} is waiting for your review.</b> Amount due ${peso(b.amount_due)}. <a href="#" data-a="open-bill" data-id="${b.id}">Review billing</a></div>`).join("")}
           ${latest ? `<div class="answer"><b style="font-size:15px">Latest report:</b> ${weekRange(latest)} <a href="#" data-a="open-report" data-id="${latest.id}">Read report</a></div>` : ""}
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">

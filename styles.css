@@ -399,3 +399,4 @@ input[type=month] { background: var(--panel); border: 1px solid var(--line); bor
 .due > div { display: flex; flex-direction: column; gap: 2px; }
 .due .r { text-align: right; align-items: flex-end; white-space: nowrap; }
 .due .r b { font: 700 18px var(--display); }
+.due.review { border-left-color: var(--warn); }
