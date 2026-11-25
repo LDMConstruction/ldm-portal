@@ -170,7 +170,8 @@ function calcTemplate() {
     { item: "Mechanical Plan", scopes: ["Air-conditioning Layout", "Exhaust Layout", "General Notes & Drawing Details"], sheets: 3, basis: "sqm", rate: 75, min: 0 },
     { item: "Bill of Quantities", scopes: ["Detailed Cost Estimate"], sheets: 1, basis: "lot", rate: 5000, min: 0 },
     { item: "Sign & Seal of Plans", scopes: ["Sign & Seal of Professionals"], sheets: 0, basis: "seal", rate: 1000, min: 0 },
-    { item: "Printing", scopes: ["Sets of Blueprint of Complete Set of Plans"], sheets: 0, basis: "print", rate: 50, min: 0 }] };
+    { item: "Printing", scopes: ["Sets of Blueprint of Complete Set of Plans"], sheets: 0, basis: "print", rate: 50, min: 0 },
+    { item: "Ocular Visit", scopes: ["One time site ocular inspection"], sheets: 0, basis: "lot", rate: 5000, min: 0 }] };
 }
 const CALC_BASIS = { sqm: "per sqm", lot: "per lot", seal: "per plan sheet", print: "per printed sheet" };
 function calcRun(k) {
