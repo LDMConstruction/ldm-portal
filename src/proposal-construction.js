@@ -32,7 +32,7 @@ function constructionTemplate() {
       { item: "Main House", scopes: ["Two Storey Residential House", "Standard Finish Starting Cost"], qty: 170, unit: "sqm", rate: 35000 },
       { item: "Fencing and Gate", scopes: ["2m Height Fence with One Vehicular", "and One Pedestrian Gate"], qty: 51, unit: "l.m.", rate: 15000 }],
     services: [
-      { item: "Design", scopes: ["Complete Residential Drawing", "Building Permit Requirements"], qty: 1, unit: "lot", rate: 157100, role: "design" },
+      { item: "Design", scopes: ["Architectural Design", "Structural Design", "Structural Analysis", "Basic Deliverables Interior Design Perspective", "Electrical", "Plumbing", "Mechanical", "Bill of Quantities", "Sign and Seal of Plans", "8 Sets of Blueprint of Complete Set of Plans"], qty: 1, unit: "lot", rate: 157100, role: "design" },
       { item: "As-Builts", scopes: ["As-Built Plans", "Printing and Sign & Seal", "Occupancy Requirements"], qty: 1, unit: "lot", rate: 30000, role: "asbuilt" },
       { item: "Liaison Services", scopes: ["Building Permit", "Occupancy Permit", "Excluding Permit Fees and Special Payments"], qty: 1, unit: "lot", rate: 40000, role: "liaison" }],
     services_note: "All processing of Building Permits and Occupancy Permit are already included in Liaison Services. This does not include Bonds (depending on the developer) and Permit Fees (which vary depending on project size and municipal assessment).",
