@@ -173,6 +173,10 @@ function calcTemplate() {
     { item: "Printing", scopes: ["Sets of Blueprint of Complete Set of Plans"], sheets: 0, basis: "print", rate: 50, min: 0 },
     { item: "Ocular Visit", scopes: ["One time site ocular inspection"], sheets: 0, basis: "lot", rate: 5000, min: 0 }] };
 }
+const calcIsC = () => PDRAFT && PDRAFT.kind === "Construction";
+const calcRead = () => calcIsC() ? readConstructionForm() : readProposalForm();
+const calcDraw = () => calcIsC() ? drawConstructionForm() : drawProposalForm();
+function calcDesignLine(c) { let l = (c.services || []).find(s => s.role === "design"); if (!l) { l = { item: "Design", scopes: [], qty: 1, unit: "lot", rate: 0, role: "design" }; (c.services = c.services || []).unshift(l); } return l; }
 const CALC_BASIS = { sqm: "per sqm", lot: "per lot", seal: "per plan sheet", print: "per printed sheet" };
 function calcRun(k) {
   const area = +k.area || 0, sets = +k.sets || 0;
@@ -190,7 +194,7 @@ function calcSection(p) {
   if (!k) return `<div class="sec">Fee computation <span class="small muted" style="font-weight:400;text-transform:none;letter-spacing:0">only you see this</span></div>
     <div class="row"><button type="button" class="btn sm" data-a="pp-calc-on">Compute the design fee from floor area</button><span class="small muted">Architectural, structural, MEPF, BOQ, sign and seal, printing</span></div>`;
   const cin = (i, key, val, w) => `<input data-pc="${i}" data-k="${key}" type="number" step="0.01" min="0" value="${esc(val ?? "")}" style="width:${w}px" aria-label="${key}">`;
-  return `<div class="sec">Fee computation <span class="small muted" style="font-weight:400;text-transform:none;letter-spacing:0">only you see this; the client sees the scope and total below</span></div>
+  return `<div class="sec">Fee computation <span class="small muted" style="font-weight:400;text-transform:none;letter-spacing:0">only you see this; the client sees ${calcIsC() ? "the Design line under services" : "the scope and total below"}</span></div>
   <div class="fg">
     <label class="f" for="pc-area">Floor area (sqm)<input id="pc-area" type="number" min="0" value="${esc(k.area || "")}"></label>
     <label class="f" for="pc-sets">Blueprint sets<input id="pc-sets" type="number" min="0" value="${esc(k.sets)}"></label>
@@ -198,7 +202,7 @@ function calcSection(p) {
   </div>
   <div class="scroll"><table class="pc-t"><thead><tr><th>Item</th><th>Basis</th><th class="num">Sheets</th><th class="num">Qty</th><th class="num">Unit cost</th><th class="num">Minimum</th><th class="num">Cost</th><th></th></tr></thead>
     <tbody id="pc-body"></tbody><tfoot><tr><td colspan="6" class="num"><b>Computed design fee</b></td><td class="num"><b id="pc-total"></b></td><td></td></tr></tfoot></table></div>
-  <div class="row"><button type="button" class="btn sm" data-a="pp-calc-add">Add line</button><button type="button" class="btn sm primary" data-a="pp-calc-use">Use as total contract cost</button><span class="small" id="pc-diff"></span>
+  <div class="row"><button type="button" class="btn sm" data-a="pp-calc-add">Add line</button><button type="button" class="btn sm primary" data-a="pp-calc-use">${calcIsC() ? "Use as the Design services cost" : "Use as total contract cost"}</button><span class="small" id="pc-diff"></span>
     <button type="button" class="btn sm" data-a="pp-calc-off" style="margin-left:auto">Remove computation</button></div>`;
 }
 function drawCalcRows() {
@@ -220,8 +224,9 @@ function drawCalcRows() {
     const c = document.getElementById("pc-c-" + i); if (c) { c.textContent = f(l.cost); c.title = l.minApplied ? `Minimum applied (computed ${f(l.base)})` : ""; c.classList.toggle("pc-min", l.minApplied); }
   });
   document.getElementById("pc-total").textContent = php(r.total);
-  const d = document.getElementById("pc-diff"), tot = +(document.getElementById("pp-total") || {}).value || 0;
-  if (d) { d.textContent = tot && Math.abs(tot - r.total) > 0.5 ? `Total contract cost is ${php(tot)} (${tot > r.total ? "+" : ""}${php(tot - r.total)} vs computed)` : tot ? "Total contract cost matches" : ""; d.className = "small muted"; }
+  const d = document.getElementById("pc-diff"), lbl = calcIsC() ? "Design services cost" : "Total contract cost";
+  const tot = calcIsC() ? (() => { const l = (PDRAFT.content.services || []).find(s => s.role === "design"); return l ? (+l.qty || 0) * (+l.rate || 0) : 0; })() : +(document.getElementById("pp-total") || {}).value || 0;
+  if (d) { d.textContent = tot && Math.abs(tot - r.total) > 0.5 ? `${lbl} is ${php(tot)} (${tot > r.total ? "+" : ""}${php(tot - r.total)} vs computed)` : tot ? `${lbl} matches` : ""; d.className = "small muted"; }
 }
 function readCalc() {
   const k = PDRAFT && PDRAFT.calc; if (!k || !document.getElementById("pc-area")) return;
@@ -372,11 +377,14 @@ document.addEventListener("click", async ev => {
     else if (a === "open-prop") { S.viewProposal = id; location.hash = "proposal"; render(); }
     else if (a === "edit-prop") { const x = S.proposals.find(y => y.id === id); x.kind === "Construction" ? constructionForm(x) : proposalForm(x); }
     else if (a === "dup-prop") { const x = S.proposals.find(y => y.id === id); x.kind === "Construction" ? constructionForm(x, true) : proposalForm(x, true); }
-    else if (a === "pp-calc-on") { readProposalForm(); PDRAFT.calc = calcTemplate(); const m = /(\d+(?:\.\d+)?)\s*sqm/i.exec(PDRAFT.title || ""); if (m) PDRAFT.calc.area = +m[1]; drawProposalForm(); }
-    else if (a === "pp-calc-off") { readProposalForm(); PDRAFT.calc = null; drawProposalForm(); }
-    else if (a === "pp-calc-add") { readProposalForm(); PDRAFT.calc.lines.push({ item: "", scopes: [], sheets: 0, basis: "lot", rate: 0, min: 0 }); drawProposalForm(); }
-    else if (a === "pp-calc-rm") { readProposalForm(); PDRAFT.calc.lines.splice(+el.dataset.i, 1); drawProposalForm(); }
-    else if (a === "pp-calc-use") { readProposalForm(); document.getElementById("pp-total").value = calcRun(PDRAFT.calc).total; updatePropCalc(); drawCalcRows(); toast("Total contract cost updated"); }
+    else if (a === "pp-calc-on") { calcRead(); PDRAFT.calc = calcTemplate(); const m = /(\d+(?:\.\d+)?)\s*sqm/i.exec(PDRAFT.title || ""); PDRAFT.calc.area = calcIsC() ? (+PDRAFT.content.tl.area || (m ? +m[1] : 0)) : (m ? +m[1] : 0); calcDraw(); }
+    else if (a === "pp-calc-off") { calcRead(); PDRAFT.calc = null; calcDraw(); }
+    else if (a === "pp-calc-add") { calcRead(); PDRAFT.calc.lines.push({ item: "", scopes: [], sheets: 0, basis: "lot", rate: 0, min: 0 }); calcDraw(); }
+    else if (a === "pp-calc-rm") { calcRead(); PDRAFT.calc.lines.splice(+el.dataset.i, 1); calcDraw(); }
+    else if (a === "pp-calc-use") {
+      calcRead(); const tot = calcRun(PDRAFT.calc).total;
+      if (calcIsC()) { const l = calcDesignLine(PDRAFT.content); l.qty = 1; l.unit = l.unit || "lot"; l.rate = tot; drawConstructionForm(); toast("Design services cost updated"); }
+      else { document.getElementById("pp-total").value = tot; updatePropCalc(); drawCalcRows(); toast("Total contract cost updated"); } }
     else if (a === "pp-additem") { readProposalForm(); PDRAFT.content.items.push({ item: "", scopes: [] }); drawProposalForm(); }
     else if (a === "pp-rmitem") { readProposalForm(); PDRAFT.content.items.splice(+el.dataset.i, 1); drawProposalForm(); }
     else if (a === "pp-addpay") { readProposalForm(); PDRAFT.content.payments.push({ label: ORD(PDRAFT.content.payments.length + 1) + " Payment", pct: 0, milestone: "" }); drawProposalForm(); }

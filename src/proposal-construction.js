@@ -207,6 +207,7 @@ function drawConstructionForm() {
   <div class="sec">Estimated services cost</div>
   <div class="cf-head svc"><span></span><span>Item</span><span>Scope</span><span>Qty</span><span>Unit</span><span>Cost</span><span>In the schedule as</span><span></span></div>
   <div>${costRows(c.services, "cs", true)}</div><div class="row"><button type="button" class="btn sm" data-a="cf-add" data-list="cs">Add item</button><span class="small" id="cf-cstot"></span></div>
+  ${calcSection(p)}
   <label class="f" for="cp-snote">Note under services<textarea id="cp-snote" rows="2">${esc(c.services_note)}</textarea></label>
   <div class="sec">Timeline from project size</div>
   <div class="fg">${inp("tl-area", "Floor area (sqm)", tl.area, "number", 'min="1"')}
@@ -221,11 +222,12 @@ function drawConstructionForm() {
     <label class="f wide" for="cp-terms">Terms and conditions (one per line)<textarea id="cp-terms" rows="9">${esc(c.terms.join("\n"))}</textarea></label>
     ${inp("cp-closing", "Closing line", c.closing, "text", "", true)}${inp("cp-sign", "Prepared by", c.signatory)}</div></details>
   <div class="row end"><div></div><div class="row"><button class="btn" data-a="close">Cancel</button><button class="btn" data-a="save-cprop" data-s="draft">Save draft</button><button class="btn primary" data-a="save-cprop" data-s="sent">Save and get client link</button></div></div>`);
-  updateConstructionCalc();
+  updateConstructionCalc(); drawCalcRows();
 }
 function readConstructionForm() {
   const p = PDRAFT, c = p.content, g = id => (document.getElementById(id) || {}).value;
   if (g("cp-title") === undefined) return;
+  readCalc();
   Object.assign(p, { title: g("cp-title").trim(), location: g("cp-loc").trim(), client_name: g("cp-client").trim(), client_email: g("cp-email").trim(), client_phone: g("cp-phone").trim(),
     proposal_no: g("cp-no").trim(), proposal_date: g("cp-date"), valid_days: +g("cp-valid") || 30 });
   [["cb", "build"], ["cs", "services"]].forEach(([key, list]) => document.querySelectorAll(`[data-${key}]`).forEach(e => { const it = c[list][+e.dataset[key]]; if (!it) return; const k = e.dataset.k;
@@ -256,6 +258,7 @@ async function saveConstructionProposal(status) {
   p.content.milestones = m.milestones; p.content.finance = m.finance;
   const body = { proposal_no: p.proposal_no, kind: "Construction", title: p.title, location: p.location, client_name: p.client_name, client_email: p.client_email, client_phone: p.client_phone,
     proposal_date: p.proposal_date, valid_days: p.valid_days, total: p.total, content: p.content, status: p.status === "draft" || !p.id ? status : p.status };
+  if (p.calc || (p.id && "calc" in p)) body.calc = p.calc || null;
   if (p.id) return await q(sb.from("proposals").update(body).eq("id", p.id).select().single());
   return await q(sb.from("proposals").insert(body).select().single());
 }
