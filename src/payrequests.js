@@ -11,6 +11,7 @@ function openBillings(pid) { return (S.billings || []).filter(b => (!pid || b.pr
 const msSort = (a, b) => (a.stage === b.stage ? 0 : a.stage === "Design" ? -1 : 1) || a.sort - b.sort;
 
 function vRequests() {
+  if (IS("client")) return vClientBilling();
   const req = S.milestones.filter(m => m.status === "requested");
   const bills = openBillings().filter(b => b.status === "accepted"), billsDue = bills.reduce((a, b) => a + (+b.amount_due - billPaid(b)), 0);
   const overdue = req.filter(m => m.due_date && parseD(m.due_date) < today());
@@ -19,8 +20,8 @@ function vRequests() {
   const projs = S.projects.filter(p => S.milestones.some(m => m.project_id === p.id) || ["Onboarded", "Ongoing"].includes(p.status));
   const nextUp = p => S.milestones.filter(m => m.project_id === p.id && (m.status || "scheduled") === "scheduled").sort(msSort)[0];
   return `
-  <div class="head"><div><h1>Payment requests</h1><p class="sub">Clients only see a payment once you request it. Request the next payment when its milestone is reached, then record it when the client pays.</p></div>
-  <button class="btn primary" data-a="mr-new">New payment request</button></div>
+  <div class="head"><div><h1>Billing and payments</h1><p class="sub">Request payments from the schedule, send progress billings, and record what clients pay. Clients only see a payment once you request it, and a progress billing once you send it.</p></div>
+  <div class="row"><button class="btn" data-a="new-bill">New progress billing</button><button class="btn primary" data-a="mr-new">New payment request</button></div></div>
   <div class="grid-tiles">
     <div class="tile hi"><span class="k">Requested, unpaid</span><span class="v">${peso(req.reduce((a, m) => a + +m.amount, 0) + billsDue)}</span><span class="h">${req.length} request${req.length === 1 ? "" : "s"}${bills.length ? ` and ${bills.length} accepted billing${bills.length === 1 ? "" : "s"}` : ""} with clients</span></div>
     <div class="tile"><span class="k">Overdue</span><span class="v ${overdue.length ? "neg" : ""}">${overdue.length}</span><span class="h">${overdue.length ? peso(overdue.reduce((a, m) => a + +m.amount, 0)) + " past due date" : "nothing past due"}</span></div>
@@ -31,6 +32,8 @@ function vRequests() {
       <td><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm primary" data-a="mr-pay" data-id="${m.id}">Record payment</button><button class="btn sm" data-a="mr-edit" data-id="${m.id}">Edit</button></div></td></tr>`).join("")}
     ${bills.map(b => `<tr><td><b>${esc(projName(b.project_id))}</b></td><td class="small">Progress Billing No. ${b.billing_no}<div class="muted">Accepted ${fmtD((b.responded_at || "").slice(0, 10))}${billPaid(b) ? ` · ${peso(billPaid(b))} received` : ""}</div></td><td class="small">—</td><td class="num">${peso(+b.amount_due - billPaid(b))}</td><td><span class="chip Ongoing">Accepted</span></td>
       <td><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm primary" data-a="pay-bill" data-id="${b.id}">Record payment</button><button class="btn sm" data-a="open-bill" data-id="${b.id}">Open</button></div></td></tr>`).join("")}</tbody></table></div>` : ""}
+  ${vBilling(true)}
+  <h2 style="font-size:22px;margin-top:8px">Payment schedules</h2>
   ${projs.map(p => { const ms = S.milestones.filter(m => m.project_id === p.id).sort(msSort), nx = nextUp(p);
     const paid = ms.filter(m => m.status === "paid").reduce((a, m) => a + +m.amount, 0), total = ms.reduce((a, m) => a + +m.amount, 0);
     return `<div class="card scroll"><div class="row" style="justify-content:space-between"><div><h2>${esc(p.name)}</h2><span class="small muted">${esc(p.client || "")}${total ? ` · ${peso(paid)} of ${peso(total)} scheduled payments received` : ""}</span></div>
@@ -64,10 +67,10 @@ function requestForm(m, pid) {
 }
 
 /* Client: only what is currently due */
-function clientDueCard(p) {
+function clientDueCard(p, noProposal) {
   const due = S.milestones.filter(m => m.project_id === p.id && m.status === "requested").sort((a, b) => (a.due_date || "9").localeCompare(b.due_date || "9"));
   const props = S.clientProposals.filter(x => x.project_id === p.id);
-  const bills = openBillings(p.id);
+  const bills = openBillings(p.id).filter(b => b.status === "accepted"), review = openBillings(p.id).filter(b => b.status === "sent");
   let html = `<h3 class="sec" style="border:none;padding:0">Payment due</h3>`;
   const billHtml = bills.map(b => { const left = +b.amount_due - billPaid(b), review = b.status === "sent";
     return `<div class="due ${review ? "review" : ""}"><div><b>Progress Billing No. ${b.billing_no}</b><span class="small muted">${review ? "Waiting for your review. Please check and accept it." : `Accepted ${fmtD((b.responded_at || "").slice(0, 10))}`}</span>
@@ -78,7 +81,15 @@ function clientDueCard(p) {
         <div class="r"><b>${peso(m.amount)}</b><span class="small ${over ? "neg" : "muted"}">${m.due_date ? (over ? "Overdue since " : "Due ") + fmtD(m.due_date) : ""}</span></div></div>`; }).join("") : "") +
       `<p class="small muted" style="margin:0">Total due now ${peso(dueTotal)}. Please contact LDM for payment details if you need them.</p></div>`
     : `<div class="empty">No payment due right now.</div>`;
-  return html + props.map(x => `<p class="small" style="margin:0">Your ${esc((x.kind || "design").toLowerCase())} proposal ${esc(x.proposal_no)}, accepted ${fmtD((x.responded_at || "").slice(0, 10))}. <a href="#" data-a="open-prop" data-id="${x.id}">View proposal</a></p>`).join("");
+  html += review.map(b => `<div class="answer" style="border-left-color:var(--warn);background:var(--warn-soft)"><b style="font-size:15px">Progress Billing No. ${b.billing_no} (${peso(b.amount_due)}) is waiting for your review.</b> Once you accept it, it shows here as a payment due. <a href="#" data-a="open-bill" data-id="${b.id}">Review billing</a></div>`).join("");
+  return html + (noProposal ? [] : props).map(x => `<p class="small" style="margin:0">Your ${esc((x.kind || "design").toLowerCase())} proposal ${esc(x.proposal_no)}, accepted ${fmtD((x.responded_at || "").slice(0, 10))}. <a href="#" data-a="open-prop" data-id="${x.id}">View proposal</a></p>`).join("");
+}
+
+function vClientBilling() {
+  return `<div class="head"><div><h1>Billing and payments</h1><p class="sub">What is due now, progress billings from LDM for your review, and your payment history.</p></div></div>
+    ${S.projects.map(p => `<div class="card"><h2>${esc(p.name)}</h2>${clientDueCard(p, true)}</div>`).join("")}
+    ${vBilling(true)}
+    <div class="card scroll"><h2>Payment history</h2>${S.collections.length ? `<table><thead><tr><th>Date</th><th>Project</th><th>For</th><th>Reference</th><th class="num">Amount</th></tr></thead><tbody>${S.collections.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(c => `<tr><td class="small">${fmtD(c.date)}</td><td class="small">${esc(projName(c.projectId))}</td><td class="small">${esc(c.stage)} · ${esc(c.type)}</td><td class="small">${esc(c.reference)}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No payments recorded yet.</div>`}</div>`;
 }
 
 let PAYING = null;

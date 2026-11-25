@@ -25,21 +25,27 @@ function previousBilling(b) {
 }
 function basisAmount(p, basis) { const f = fin(p); return basis === "Design" ? f.designC : basis === "Total" ? f.contract : f.constrC; }
 
-function vBilling() {
+function billingGroups(list, row, owner) {
+  return (owner ? [["disputed", "Concern raised by client"], ["sent", "Waiting for client"], ["draft", "Drafts"], ["accepted", "Accepted"]] : [["sent", "Waiting for your review"], ["disputed", "Concern raised"], ["accepted", "Accepted"]])
+    .map(([st, t], i) => { const g = list.filter(b => b.status === st); if (!g.length && i) return "";
+      return `<div class="card scroll"><h2>${t} (${g.length})</h2>${g.length ? `<table><thead><tr><th>Project and billing</th><th>As of</th><th>Status</th><th class="num">Amount due</th></tr></thead><tbody>${g.map(row).join("")}</tbody></table>` : `<div class="empty">${owner ? "Nothing here." : "No billing waiting for you."}</div>`}</div>`; }).join("");
+}
+function vBilling(embed) {
   const list = S.billings.slice().sort((a, b) => (b.as_of || "").localeCompare(a.as_of || "") || b.billing_no - a.billing_no)
     .filter(b => !S.reportFilter || b.project_id === S.reportFilter);
   const row = b => `<tr class="click" data-a="open-bill" data-id="${b.id}"><td><b>${esc(projName(b.project_id))}</b><div class="small muted">Progress Billing No. ${b.billing_no} · ${esc(b.basis)}</div></td>
     <td class="small">${fmtD(b.as_of)}</td><td>${bchip(b.status)}</td><td class="num">${peso(b.amount_due)}</td></tr>`;
   const owner = IS("owner");
   const due = list.filter(b => b.status === "sent").reduce((a, b) => a + (+b.amount_due || 0), 0);
+  if (embed) return `<div class="row" style="justify-content:space-between;margin-top:8px"><h2 style="font-size:22px">Progress billing</h2>
+    <div class="row"><select id="bf" data-local="reportFilter" aria-label="Project"><option value="">All projects</option>${S.projects.map(p => `<option value="${p.id}" ${p.id === S.reportFilter ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>${owner ? `<button class="btn primary" data-a="new-bill">New progress billing</button>` : ""}</div></div>
+    ${billingGroups(list, row, owner)}`;
   return `
   <div class="head"><div><h1>${owner ? "Progress billing" : "Billing"}</h1><p class="sub">${owner ? "Prepare billing from the accomplishment to date. Clients see a billing once you send it, and can accept it or raise a concern." : "Progress billings from LDM Construction. Review each one and accept it, or raise a concern if something needs checking."}</p></div>
   <div class="row"><select id="bf" data-local="reportFilter" aria-label="Project"><option value="">All projects</option>${S.projects.map(p => `<option value="${p.id}" ${p.id === S.reportFilter ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
   ${owner ? `<button class="btn primary" data-a="new-bill">New progress billing</button>` : ""}</div></div>
   ${!owner && due ? `<div class="answer"><b style="font-size:15px">${peso(due)}</b> in billing waiting for your review.</div>` : ""}
-  ${(owner ? [["disputed", "Concern raised by client"], ["sent", "Waiting for client"], ["draft", "Drafts"], ["accepted", "Accepted"]] : [["sent", "Waiting for your review"], ["disputed", "Concern raised"], ["accepted", "Accepted"]])
-    .map(([st, t], i) => { const g = list.filter(b => b.status === st); if (!g.length && i) return "";
-      return `<div class="card scroll"><h2>${t} (${g.length})</h2>${g.length ? `<table><thead><tr><th>Project and billing</th><th>As of</th><th>Status</th><th class="num">Amount due</th></tr></thead><tbody>${g.map(row).join("")}</tbody></table>` : `<div class="empty">${owner ? "Nothing here." : "No billing waiting for you."}</div>`}</div>`; }).join("")}`;
+  ${billingGroups(list, row, owner)}`;
 }
 
 function vBill() {
