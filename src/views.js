@@ -574,7 +574,7 @@ document.addEventListener("click", async ev => {
   else if (a === "save-col") {
     const f = document.getElementById("kf"); if (!f.reportValidity()) return;
     const d = formData("kf"); d.amount = +d.amount || 0;
-    el.disabled = true; if (await write("collections/" + (id || newId("k")), d)) { closeModal(); toast("Collection recorded"); if (d.date) S.colYear = +d.date.slice(0, 4); } el.disabled = false;
+    el.disabled = true; if (await write("collections/" + (id || newId("k")), d)) { closeModal(); toast("Collection recorded"); if (d.date) S.colYear = +d.date.slice(0, 4); if (typeof markPayingPaid === "function") await markPayingPaid(); } el.disabled = false;
   }
   else if (a === "del-project" || a === "del-cost" || a === "del-col") {
     if (!el.dataset.armed) { el.dataset.armed = "1"; el.textContent = "Click again to delete"; setTimeout(() => { if (el.isConnected) { delete el.dataset.armed; el.textContent = a === "del-project" ? "Delete project" : "Delete entry"; } }, 4000); return; }

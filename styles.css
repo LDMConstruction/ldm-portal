@@ -392,3 +392,10 @@ input[type=month] { background: var(--panel); border: 1px solid var(--line); bor
 .cd-cost th:nth-child(1) { width: 6%; } .cd-cost th:nth-child(2) { width: 19%; } .cd-cost th:nth-child(4), .cd-cost th:nth-child(5) { width: 7%; }
 .cd-cost td:nth-child(2) { width: auto; }
 .cd-cost th:last-child { width: 17%; }
+/* ---------- payment requests ---------- */
+.duelist { display: flex; flex-direction: column; gap: 8px; }
+.due { display: flex; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 8px; background: var(--panel); }
+.due.over { border-left-color: var(--bad); }
+.due > div { display: flex; flex-direction: column; gap: 2px; }
+.due .r { text-align: right; align-items: flex-end; white-space: nowrap; }
+.due .r b { font: 700 18px var(--display); }

@@ -387,7 +387,7 @@ function vHome() {
           ${(() => { const rb = S.costs.filter(c => c.projectId === p.id && c.paidFrom === "client"); if (!rb.length) return ""; const pend = rb.filter(c => !c.reimbursed).reduce((a, c) => a + c.amount, 0);
             return `<h3 class="sec" style="border:none;padding:0">Expenses you paid that LDM reimburses</h3>${pend ? `<div class="answer"><b style="font-size:15px">${peso(pend)}</b> to be reimbursed to you</div>` : ""}
             <table><thead><tr><th>Date</th><th>Item</th><th>Status</th><th class="num">Amount</th></tr></thead><tbody>${rb.map(c => `<tr><td class="small">${fmtD(c.date)}</td><td class="small">${esc(c.category)}${c.description ? " · " + esc(c.description) : ""}</td><td>${c.reimbursed ? `<span class="chip Ongoing">Reimbursed</span>` : `<span class="chip Proposal">To be reimbursed</span>`}</td><td class="num">${peso(c.amount)}</td></tr>`).join("")}</tbody></table>`; })()}
-          ${clientScheduleCard(p)}
+          ${clientDueCard(p)}
         </div>
       </div></div>`;
   }).join("");
@@ -465,16 +465,16 @@ document.addEventListener("change", e => {
 
 /* ---------- navigation by role ---------- */
 const NAV = {
-  owner: [["overview", "Dashboard"], ["proposals", "Proposals"], ["progress", "Project Progress"], ["reports", "Weekly Reports"], ["clients", "Clients"], ["phases", "Projects & Phases"], ["capacity", "Capacity by Quarter"], ["costs", "Monthly Costs"], ["collections", "Collections"], ["billing", "Progress Billing"], ["profit", "Profit"], ["petty", "Petty Cash"], ["team", "Team & Access"]],
+  owner: [["overview", "Dashboard"], ["proposals", "Proposals"], ["progress", "Project Progress"], ["reports", "Weekly Reports"], ["clients", "Clients"], ["phases", "Projects & Phases"], ["capacity", "Capacity by Quarter"], ["costs", "Monthly Costs"], ["collections", "Collections"], ["requests", "Payment Requests"], ["billing", "Progress Billing"], ["profit", "Profit"], ["petty", "Petty Cash"], ["team", "Team & Access"]],
   employee: [["progress", "Progress"], ["running", "Running Cost"], ["reports", "Weekly Reports"]],
   client: [["home", "My Project"], ["billing", "Billing"], ["reports", "Progress Reports"]]
 };
 const VIEWS = { overview: vOverview, progress: vProgress, clients: vClients, phases: vPhases, capacity: vCapacity, costs: vCosts, collections: vCollections, profit: vProfit,
-  running: vRunning, petty: vPetty, reports: vReports, report: vReport, team: vTeam, home: vHome, billing: vBilling, bill: vBill, proposals: vProposals, proposal: vProposal };
+  running: vRunning, petty: vPetty, reports: vReports, report: vReport, team: vTeam, home: vHome, billing: vBilling, bill: vBill, proposals: vProposals, proposal: vProposal, requests: vRequests };
 function allowed() { return (NAV[ROLE] || []).map(x => x[0]).concat(["report"], IS("employee") ? [] : ["bill", "proposal"]); }
 function current() { const h = location.hash.slice(1); return allowed().includes(h) && VIEWS[h] ? h : (NAV[ROLE] || [["overview"]])[0][0]; }
 function buildNav() {
-  document.getElementById("nav").innerHTML = (NAV[ROLE] || []).map(([k, t]) => `<a href="#${k}" data-v="${k}">${t}${k === "reports" && IS("owner") ? ` <span class="n" id="n-rep"></span>` : ""}${k === "billing" ? ` <span class="n" id="n-bill"></span>` : ""}${k === "proposals" ? ` <span class="n" id="n-prop"></span>` : ""}</a>`).join("");
+  document.getElementById("nav").innerHTML = (NAV[ROLE] || []).map(([k, t]) => `<a href="#${k}" data-v="${k}">${t}${k === "reports" && IS("owner") ? ` <span class="n" id="n-rep"></span>` : ""}${k === "billing" ? ` <span class="n" id="n-bill"></span>` : ""}${k === "proposals" ? ` <span class="n" id="n-prop"></span>` : ""}${k === "requests" || (k === "home" && IS("client")) ? ` <span class="n" id="n-req"></span>` : ""}</a>`).join("");
   document.getElementById("sync").innerHTML = `<b>${esc(ME.full_name || ME.email)}</b><br><span>${{ owner: "Owner", employee: "Employee", client: "Client" }[ROLE]}</span> · <a href="#" data-a="signout">Sign out</a>`;
   document.body.dataset.role = ROLE;
 }
@@ -484,6 +484,7 @@ function render() {
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v || (v === "report" && a.dataset.v === "reports") || (v === "bill" && a.dataset.v === "billing") || (v === "proposal" && a.dataset.v === (IS("owner") ? "proposals" : "home"))));
   const nr = document.getElementById("n-rep"); if (nr) nr.textContent = S.reports.filter(r => r.status === "submitted").length || "";
   const np = document.getElementById("n-prop"); if (np) np.textContent = S.proposals.filter(p => p.status === "accepted").length || "";
+  const nq = document.getElementById("n-req"); if (nq) nq.textContent = S.milestones.filter(m => m.status === "requested").length || "";
   const nb = document.getElementById("n-bill"); if (nb) nb.textContent = S.billings.filter(b => IS("client") ? b.status === "sent" : b.status === "disputed").length || "";
   if (!S.loaded) { document.getElementById("view").innerHTML = `<div class="empty">Loading…</div>`; return; }
   const focusId = document.activeElement && document.activeElement.id;
