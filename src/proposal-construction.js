@@ -88,7 +88,7 @@ function buildTimeline(c) {
   const area = +tl.area || 0, storeys = +tl.storeys || 2, start = tl.design_start || ym(new Date());
   const consTotal = sumCost(c.build), design = roleCost(c, "design"), asbuilt = roleCost(c, "asbuilt"), liaison = roleCost(c, "liaison");
   const lp = +tl.liaison_first_pct || 50, dp = +tl.dp_pct || 30;
-  const D = designMonths(area), mid = Math.round((D - 1) / 2), fin = monthAdd(start, D - 1);
+  const D = Math.max(1, Math.min(12, +tl.design_months || designMonths(area))), mid = Math.round((D - 1) / 2), fin = monthAdd(start, D - 1);
   const designRows = [
     { m: start, act: "Design starts, initial consultation, schematic floor plan layout, and 3D perspectives", pay: "50% — 1st payment", pct: 50 },
     { m: monthAdd(start, mid), act: "Completion of working drawings, detailed plans, and building permit requirements", pay: "30% — 2nd payment", pct: 30 },
@@ -112,7 +112,7 @@ function buildTimeline(c) {
     ...(asbuilt ? [{ m: postStart, act: "Payment — As-Built Plans (Printing, Sign & Seal, Occupancy Requirements)", amt: asbuilt }] : []),
     ...(liaison ? [{ m: monthAdd(postStart, 1), act: `Payment — Liaison Services balance (${100 - lp}% — Occupancy Permit processing)`, amt: r2(liaison * (100 - lp) / 100) }] : [])];
   return { tl, area, storeys, consTotal, design, asbuilt, liaison, servicesTotal: sumCost(c.services), D, M, n, dp, lp, designRows, permitRows, consRows, consStart, consEnd: last.m, postRows,
-    postEnd: postRows[postRows.length - 1].m, suggested: suggestMonths(area, storeys) };
+    postEnd: postRows[postRows.length - 1].m, suggested: suggestMonths(area, storeys), suggestedD: designMonths(area), designEnd: fin };
 }
 
 /* Payment milestones and contract split, used when the client is onboarded. */
@@ -149,7 +149,7 @@ function constructionDoc(p, attached) {
       <table class="cd-sum"><tbody><tr><td>TOTAL CONSTRUCTION COST:</td><td>${php(t.consTotal)}</td></tr><tr><td>TOTAL SERVICES COST:</td><td>${php(t.servicesTotal)}</td></tr>
         <tr class="g"><td>GRAND TOTAL (Construction + Services):</td><td>${php(t.consTotal + t.servicesTotal)}</td></tr></tbody></table>
       ${ul("COST SCHEDULE")}
-      ${ul("A. DESIGN PHASE")}${attached && !t.design ? `<p>Design: see the Design Cost Proposal for the design fee and its payment schedule.</p>` : `<p>Design Cost${t.asbuilt ? " (excluding As-Builts)" : ""}: <b>${php(t.design)}</b></p>
+      ${ul("A. DESIGN PHASE")}${attached && !t.design ? `<p>Design: see the Design Cost Proposal for the design fee and its payment schedule.</p>` : `<p>Design Period: <b>${monthName(t.designRows[0].m)}${t.D > 1 ? " – " + monthName(t.designEnd) : ""} (${t.D} Month${t.D > 1 ? "s" : ""})</b></p><p>Design Cost${t.asbuilt ? " (excluding As-Builts)" : ""}: <b>${php(t.design)}</b></p>
       <table class="cd-t"><thead><tr><th>DATE/MILESTONE</th><th>ACTIVITY</th><th>PAYMENT</th><th>AMOUNT</th></tr></thead><tbody>
         ${t.designRows.map(r => `<tr><td>${monthName(r.m)}</td><td>${esc(r.act)}</td><td>${r.pay}</td><td class="r">${php(r.amt)}</td></tr>`).join("")}
         <tr><td></td><td></td><td>Design Total:</td><td class="r">${php(t.design)}</td></tr></tbody></table>`}
@@ -211,7 +211,7 @@ function drawConstructionForm() {
   <div class="sec">Timeline from project size</div>
   <div class="fg">${inp("tl-area", "Floor area (sqm)", tl.area, "number", 'min="1"')}
     <label class="f" for="tl-storeys">Storeys<select id="tl-storeys">${[1, 2, 3, 4].map(n => `<option value="${n}" ${+tl.storeys === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-    ${inp("tl-start", "Design starts", tl.design_start, "month")}${inp("tl-months", "Construction months (blank = suggested)", tl.months || "", "number", 'min="2" max="36"')}
+    ${inp("tl-start", "Design starts", tl.design_start, "month")}${inp("tl-dmonths", "Design months (blank = suggested)", tl.design_months || "", "number", 'min="1" max="12"')}${inp("tl-months", "Construction months (blank = suggested)", tl.months || "", "number", 'min="2" max="36"')}
     ${inp("tl-dp", "Downpayment before mobilization (%)", tl.dp_pct, "number", 'min="0" max="100"')}${inp("tl-lp", "Liaison paid at permit filing (%)", tl.liaison_first_pct, "number", 'min="0" max="100"')}
     ${inp("tl-pbs", "Progress billing % (optional, comma separated)", tl.pb_pcts, "text", 'placeholder="Leave blank to use the LDM profile"', true)}</div>
   <div class="calc" id="cf-calc"></div>
@@ -231,7 +231,7 @@ function readConstructionForm() {
   [["cb", "build"], ["cs", "services"]].forEach(([key, list]) => document.querySelectorAll(`[data-${key}]`).forEach(e => { const it = c[list][+e.dataset[key]]; if (!it) return; const k = e.dataset.k;
     it[k] = k === "scopes" ? e.value.split("\n").map(s => s.trim()).filter(Boolean) : (k === "qty" || k === "rate") ? (+e.value || 0) : e.value; }));
   c.services_note = g("cp-snote");
-  Object.assign(c.tl, { area: +g("tl-area") || 0, storeys: +g("tl-storeys") || 2, design_start: g("tl-start") || ym(new Date()), months: +g("tl-months") || 0, dp_pct: +g("tl-dp") || 0, liaison_first_pct: +g("tl-lp") || 0, pb_pcts: g("tl-pbs") });
+  Object.assign(c.tl, { area: +g("tl-area") || 0, storeys: +g("tl-storeys") || 2, design_start: g("tl-start") || ym(new Date()), months: +g("tl-months") || 0, design_months: +g("tl-dmonths") || 0, dp_pct: +g("tl-dp") || 0, liaison_first_pct: +g("tl-lp") || 0, pb_pcts: g("tl-pbs") });
   if (g("cp-bar") !== undefined) { c.title_bar = g("cp-bar"); c.intro = g("cp-intro"); c.terms = g("cp-terms").split("\n").map(s => s.trim()).filter(Boolean); c.closing = g("cp-closing"); c.signatory = g("cp-sign"); }
   const t = buildTimeline(c); p.total = r2(t.consTotal + t.servicesTotal);
 }
@@ -242,7 +242,7 @@ function updateConstructionCalc() {
   const s1 = document.getElementById("cf-cbtot"), s2 = document.getElementById("cf-cstot");
   if (s1) s1.textContent = "Construction total " + php(t.consTotal); if (s2) s2.textContent = "Services total " + php(t.servicesTotal);
   const own = String(c.tl.pb_pcts || "").split(/[,\s]+/).filter(Boolean), pbSum = t.consRows.reduce((a, r) => a + (r.pct || 0), 0);
-  box.innerHTML = `<div><span>Design</span><b>${t.D} months</b><span>${monthName(t.designRows[0].m)} to ${monthName(t.designRows[2].m)}</span></div>
+  box.innerHTML = `<div><span>Design</span><b>${t.D} month${t.D > 1 ? "s" : ""}</b><span>${monthName(t.designRows[0].m)} to ${monthName(t.designEnd)}${+c.tl.design_months ? ` (suggested ${t.suggestedD})` : ` (suggested for ${t.area} sqm)`}</span></div>
     <div><span>Construction</span><b>${t.M} months</b><span>${monthName(t.consStart)} to ${monthName(t.consEnd)}${+c.tl.months ? ` (suggested ${t.suggested})` : " (suggested for " + t.area + " sqm, " + t.storeys + " storey" + (t.storeys > 1 ? "s" : "") + ")"}</span></div>
     <div><span>Billings</span><b>DP + ${t.n} PBs</b><span class="${own.length && own.length !== t.n ? "neg" : ""}">${own.length && own.length !== t.n ? `Your list has ${own.length} values; ${t.n} needed, so the LDM profile is used` : `DP ${t.dp}% + PBs ${pbSum}% = ${t.dp + pbSum}%`}</span></div>
     <div><span>Grand total</span><b>${php(t.consTotal + t.servicesTotal)}</b><span>post construction ends ${monthName(t.postEnd)}</span></div>`;
@@ -274,7 +274,7 @@ document.addEventListener("click", async ev => {
     }
   } catch (e) { toast(friendly(e)); el.disabled = false; }
 });
-document.addEventListener("input", e => { if (e.target.closest && e.target.closest("[data-cb], [data-cs], #tl-area, #tl-storeys, #tl-start, #tl-months, #tl-dp, #tl-lp, #tl-pbs")) updateConstructionCalc(); });
+document.addEventListener("input", e => { if (e.target.closest && e.target.closest("[data-cb], [data-cs], #tl-area, #tl-storeys, #tl-start, #tl-months, #tl-dmonths, #tl-dp, #tl-lp, #tl-pbs")) updateConstructionCalc(); });
 let lastArea = null;
 document.addEventListener("focusin", e => { if (e.target.id === "tl-area") lastArea = +e.target.value; });
 document.addEventListener("change", e => {
